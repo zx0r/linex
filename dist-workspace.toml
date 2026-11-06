@@ -1,0 +1,67 @@
+[workspace]
+members = ["cargo:."]
+
+[dist]
+# Pinned cargo-dist version executing in CI runners
+cargo-dist-version = "0.33.1"
+allow-dirty = ["ci"]
+
+# Target CI engine
+ci = ["github"]
+
+# CI execution behavior on Pull Requests:
+# - "plan": Dry-runs build matrix calculation without actual compilation
+# - "upload": Builds artifacts and attaches them to PR run summary
+# - "skip": Disables PR execution
+pr-run-mode = "plan"
+
+precise-cli-versions = true
+
+# Publish Jobs
+publish-jobs = ["homebrew"]
+
+# Target Platform Triples
+targets = [
+  "x86_64-unknown-linux-gnu",
+  "x86_64-unknown-linux-musl",
+  "aarch64-unknown-linux-gnu",
+  "aarch64-unknown-linux-musl",
+  "x86_64-apple-darwin",
+  "aarch64-apple-darwin"
+]
+
+# Installers Generated in Global Phase
+installers = [
+  "shell",
+  "homebrew"
+]
+
+# Destination path where shell/ps1 scripts place binaries
+install-path = ["$CARGO_HOME/bin", "~/.local/bin"]
+
+# Companion in-place auto-updater (<bin>-update binary)
+install-updater = true
+
+# Archive Compression
+unix-archive = ".tar.gz"
+
+# Homebrew Tap Repository
+tap = "zx0r/homebrew-tap"
+formula = "statty"
+
+# Supply Chain Provenance (SLSA Level 3 via GitHub Attestations)
+github-attestations = true
+github-attestations-phase = "announce"
+
+# Embed dependency graph into compiled binaries for runtime vulnerability scanners
+cargo-auditable = true
+
+# GitHub Actions Runner Machine Mapping
+[dist.github-custom-runners]
+global = "ubuntu-latest"
+aarch64-apple-darwin = "macos-latest"
+x86_64-apple-darwin = "macos-latest"
+x86_64-unknown-linux-gnu = "ubuntu-latest"
+x86_64-unknown-linux-musl = "ubuntu-latest"
+aarch64-unknown-linux-gnu = "ubuntu-latest"
+aarch64-unknown-linux-musl = "ubuntu-latest"

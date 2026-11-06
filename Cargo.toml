@@ -1,0 +1,112 @@
+[package]
+name = "statty"
+version = "0.1.0"
+edition = "2024"
+resolver = "3"
+rust-version = "1.96.0"
+repository = "https://github.com/zx0r/statty"
+description = "Zero-dependency, zero-allocation telemetry widgets"
+homepage = "https://github.com/zx0r/statty#readme"
+authors = ["zx0r <admin@zx0r.io>"]
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+categories = ["command-line-utilities"]
+keywords = ["telemetry", "widgets", "cli"]
+autobenches = false
+
+# Strict Source Ingestion Boundary: Whitelists strictly pure Rust sources & manifest
+include = [
+  "src/**/*.rs",
+  "tests/**/*.rs",
+  "benches/**/*.rs",
+  "Cargo.toml",
+  "README.md",
+  "LICENSE*",
+]
+
+[package.metadata.dist]
+dist = true
+
+# ZERO DEPENDENCIES (pure POSIX / Darwin C ABI via sys.rs)
+[dependencies]
+
+[dev-dependencies]
+
+[[bench]]
+name = "bench_scale"
+harness = false
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dist]
+inherits = "release"
+lto = "fat"
+
+[profile.release-small]
+inherits = "release"
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = 2
+split-debuginfo = "unpacked"
+incremental = true
+codegen-units = 256
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.profiling]
+inherits = "release"
+debug = "line-tables-only"
+strip = false
+panic = "unwind"
+
+[profile.test]
+inherits = "dev"
+opt-level = 1
+debug = 1
+overflow-checks = true
+split-debuginfo = "unpacked"
+
+[profile.bench]
+inherits = "release"
+debug = true
+opt-level = 3
+lto = "thin"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+unused_lifetimes = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"
+allow_attributes_without_reason = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+inline_always = "warn"
+must_use_candidate = "allow"

@@ -1,0 +1,322 @@
+# =============================================================================
+# CI Quality Gates Specification
+# =============================================================================
+# Standards:
+#   - OpenSSF Scorecard L4: Immutable commit SHA pinning, root permissions: {}
+#   - StepSecurity Harden-Runner: Kernel-level eBPF egress audit (audit policy)
+#   - Conventional Commits 1.0.0: Specification enforcement via Cocogitto
+# Toolchain & Static Verification:
+#   - actionlint: Actions workflow AST validation with embedded ShellCheck
+#   - gitleaks: High-entropy secret and credential detection across Git deltas
+#   - cargo fmt & cargo clippy: Strict linting (-D warnings, all-targets, all-features)
+#   - cargo-machete: Unused crate dependency detection via AST analysis
+#   - cargo-deny: RustSec advisories, SPDX license compliance, ban & source policy
+# Execution, Coverage & Memory Safety:
+#   - cargo-nextest: Process-isolated unit and integration test runner
+#   - cargo-llvm-cov: Source-based code coverage instrumentation and threshold gate
+#   - cargo-miri: Tree Borrows aliasing model, strict provenance, alignment validation
+# Topology:
+#   - Parallelized DAG: lint-workflows -> {fast-checks, security-audit} -> {tests, miri} -> ci-gate
+# =============================================================================
+
+name: "CI"
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  # Required trigger for GitHub Merge Queue (monitored merge groups)
+  merge_group:
+
+# Least-privilege default permissions per OpenSSF Scorecard L4 mandate
+permissions: {}
+
+# Concurrency Management:
+# - On Pull Requests: Cancels in-progress runs when new commits arrive to conserve runners.
+# - On Main & Merge Queue: Strictly prevents cancellation to ensure cache-warming finishes.
+concurrency:
+  group: "ci-${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress:
+    ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/heads/gh-readonly-queue/')
+    }}
+
+env:
+  CARGO_TERM_COLOR: "always"
+  CARGO_INCREMENTAL: "0" # Disable incremental compilation to optimize CI cache hit ratios & artifact size
+  # Pinned nightly toolchain
+  MIRI_NIGHTLY: "nightly-2026-10-28"
+
+defaults:
+  run:
+    shell: "bash"
+
+jobs:
+  # ----------------------------------------------------------------------------
+  # Gate 0: Workflow Syntax, Schema & Security SAST (< 15s)
+  # ----------------------------------------------------------------------------
+  # Purpose: Fast fail-closed validation of all GitHub Actions workflows and shell scripts
+  lint-workflows:
+    name: "🛡️ [Gate 0] Workflow Syntax & Security SAST"
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 5
+    permissions:
+      contents: "read"
+    steps:
+      - name: "Harden Runner (Egress Audit)"
+        uses: "step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43" # v2.22.3
+        with:
+          egress-policy: "audit"
+
+      - name: "Checkout Source Code (Full History for Audit & CC)"
+        uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: "Verify Workflow Syntax & ShellCheck (actionlint)"
+        uses: "eifinger/actionlint-action@1fc89649be682d16ec5cf65ea16e269eb88d3982" # v1.10.2
+
+      # NOTE: zizmorcore/zizmor-action relies on pip/PyPI to download Python wheels at runtime,
+      # violating zero-trust egress block policies in a pure Rust runner environment.
+      # Workflow security SAST is enforced offline pre-commit via lefthook (zizmor --offline).
+      # - name: "Audit Workflow Security Patterns (zizmor)"
+      #   uses: "zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b" # v0.8.0
+      #   with:
+      #     advanced-security: false
+
+      - name: "Scan Secrets & Credentials (gitleaks)"
+        uses: "gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e" # v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Verify Conventional Commits (Cocogitto)"
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: "cocogitto/cocogitto-action@390bda87a19bf627e03ad075c67a11e9ddbb7547" # v4
+        with:
+          command: "check"
+          args: "--from-latest-tag"
+
+  # ----------------------------------------------------------------------------
+  # Gate 1: Fast Static Verification (< 45s feedback SLA)
+  # ----------------------------------------------------------------------------
+  # Purpose: Fast-fail validation on formatting, lints, and dependency hygiene
+  # Optimization: Executes zero-compilation AST checks before downloading multi-MB caches
+  fast-checks:
+    name: "🛡️ [Gate 1] Lint, Format & Hygiene"
+    needs: ["lint-workflows"]
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 10
+    permissions:
+      contents: "read"
+    steps:
+      # StepSecurity Harden-Runner: Audits and enforces outbound network boundaries
+      - name: "Harden Runner (Egress Audit)"
+        uses: "step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43" # v2.22.3
+        with:
+          egress-policy: "audit"
+
+      # Immutable commit SHA checkout prevents upstream tag tampering (OpenSSF L4)
+      - name: "Checkout Source Code"
+        uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Fail-Fast Check 1: Formatting compliance without compiler invocation (< 2s)
+      - name: "Verify Rust Formatting Compliance (Fail-Fast)"
+        run: "cargo fmt --all -- --check"
+
+      # Install cargo-machete binary via pre-compiled GitHub release installer
+      - name: "Install Developer Utilities (cargo-machete)"
+        uses: "taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32" # v2.88.0
+        with:
+          tool: "cargo-machete@0.9.2"
+
+      # Fail-Fast Check 2: Parse Cargo.toml manifests to detect unused dependencies
+      - name: "Detect Unused Dependencies (Fail-Fast)"
+        run: "cargo machete"
+
+      # Enforce pinned toolchain version declared in rust-toolchain.toml (1.96.0)
+      - name: "Introspect Pinned Rust Toolchain"
+        run: "rustup show"
+
+      # NOTE: Zero-dependency crate compiles in < 0.4s on 4-core runners.
+      # Swatinem/rust-cache removed to eliminate ~10s of archive upload/download overhead.
+
+      # Strict Clippy Static Analysis: Denies all warnings across workspace and tests
+      # Enforces --locked to guarantee hermetic builds against Cargo.lock
+      - name: "Run Clippy (Strict Warnings)"
+        run: "cargo clippy --locked --workspace --all-targets --all-features -- -D warnings"
+
+      # Rustdoc Build Verification: Ensures zero broken intra-doc links or missing docs
+      - name: "Verify Documentation Generation"
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: "cargo doc --locked --no-deps --all-features"
+
+  # ----------------------------------------------------------------------------
+  # Gate 2: Supply Chain Security & License Policy (cargo-deny)
+  # ----------------------------------------------------------------------------
+  # Purpose: Audits dependency tree against RustSec advisory database, bans list,
+  # approved open-source licenses, and trusted crate sources
+  security-audit:
+    name: "🔐 [Gate 2] Supply Chain & License Audit"
+    needs: ["lint-workflows"]
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 10
+    permissions:
+      contents: "read"
+    steps:
+      - name: "Harden Runner (Egress Audit)"
+        uses: "step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43" # v2.22.3
+        with:
+          egress-policy: "audit"
+
+      - name: "Checkout Source Code"
+        uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Executes cargo-deny v0.20+ with zero tolerance for security advisories or unapproved licenses
+      - name: "Audit Vulnerabilities, Licenses, Bans & Sources"
+        uses: "EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25" # v2.1.1 (cargo-deny 0.20.2)
+        with:
+          command: "check"
+          arguments: "--locked --all-features"
+
+  # ----------------------------------------------------------------------------
+  # Gate 3: Test Execution & LLVM Source Coverage (Nextest + Integration E2E)
+  # ----------------------------------------------------------------------------
+  # Purpose: Process-isolated unit/integration tests with source-based LLVM coverage
+  # Security: Withholds id-token permissions to eliminate OIDC leakage in test runners
+  test-and-coverage:
+    name: "🧪 [Gate 3] Process-Isolated Tests & Coverage"
+    needs: ["fast-checks"]
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 20
+    permissions:
+      contents: "read"
+    env:
+      # Directs LLVM coverage instrumentation into standard target/
+      # Allows Swatinem/rust-cache to prune test binaries and profraw dumps properly
+      CARGO_LLVM_COV_TARGET_DIR: "target"
+    steps:
+      - name: "Harden Runner (Egress Audit)"
+        uses: "step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43" # v2.22.3
+        with:
+          egress-policy: "audit"
+
+      - name: "Checkout Source Code"
+        uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Dedicated cache bucket for instrumented coverage compilation
+      - name: "Setup Rust Cache (Coverage Profile)"
+        uses: "Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6" # v2.7.8
+        with:
+          shared-key: "gate3-llvm-cov"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # Install pinned, reproducible test runners and instrumentation tooling
+      - name: "Install Pinned Nextest & LLVM Source Coverage"
+        uses: "taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32" # v2.88.0
+        with:
+          tool: "cargo-nextest@0.9.92,cargo-llvm-cov@0.6.16"
+
+      # Process-Isolated Test Execution & Minimum Coverage Gate:
+      # Nextest executes each test in its own POSIX process, preventing thread-local pollution
+      # Fails pipeline if total line coverage drops below 55% threshold
+      - name: "Execute Isolated Tests with LLVM Coverage & Minimum Gate"
+        run: |
+          mkdir -p target/llvm-cov
+          cargo llvm-cov nextest \
+            --locked \
+            --profile ci \
+            --workspace \
+            --all-features \
+            --lcov \
+            --output-path target/llvm-cov/lcov.info \
+            --fail-under-lines 55
+
+      # Upload coverage report artifact for external ingestion & PR decoration
+      - name: "Upload Coverage Artifact for External Reporting"
+        uses: "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9" # v7.0.2
+        with:
+          name: "lcov-report"
+          path: "target/llvm-cov/lcov.info"
+          if-no-files-found: "error"
+          retention-days: 1
+
+  # ----------------------------------------------------------------------------
+  # Gate 4: Memory Model Verification & Undefined Behavior (Miri)
+  # ----------------------------------------------------------------------------
+  # Purpose: Executes unit tests under the Miri interpreter with Tree Borrows aliasing
+  # and strict provenance enforcement
+  miri-verification:
+    name: "🔬 [Gate 4] Memory Safety & Tree Borrows (Miri)"
+    needs: ["fast-checks"]
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 20
+    permissions:
+      contents: "read"
+    steps:
+      - name: "Harden Runner (Egress Audit)"
+        uses: "step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43" # v2.22.3
+        with:
+          egress-policy: "audit"
+
+      - name: "Checkout Source Code"
+        uses: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Installs verified Nightly toolchain with pre-compiled Miri and standard library sources
+      - name: "Install Pinned Nightly Rust with Miri"
+        run: |
+          rustup toolchain install "${MIRI_NIGHTLY}" --profile minimal --component miri,rust-src
+          rustup override set "${MIRI_NIGHTLY}"
+
+      # Caches Miri's pre-compiled standard library sysroot in ~/.cache/miri
+      # Eliminates 40-60s of std recompilation overhead on subsequent CI runs
+      - name: "Setup Rust Cache (Miri Sysroot & Target)"
+        uses: "Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6" # v2.7.8
+        with:
+          shared-key: "gate4-miri"
+          cache-directories: "~/.cache/miri"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # Memory Safety Verification:
+      # - -Zmiri-disable-isolation: Required because arena/record unit tests verify atomic tempfile creation
+      # - -Zmiri-tree-borrows: Enforces next-generation pointer aliasing rules
+      # - -Zmiri-strict-provenance: Detects integer-to-pointer casting violations
+      - name: "Run Miri Memory Safety Verification"
+        env:
+          RUST_BACKTRACE: "1"
+          MIRIFLAGS: "-Zmiri-disable-isolation -Zmiri-tree-borrows -Zmiri-strict-provenance"
+        run: "cargo miri test --locked --workspace --lib"
+
+  # ----------------------------------------------------------------------------
+  # Gate 5: Single Branch Protection & Merge Queue Aggregator
+  # ----------------------------------------------------------------------------
+  # Purpose: Terminal aggregator job that evaluates all upstream gate results.
+  # Architectural Benefit: Simplifies GitHub Branch Protection rulesets and Terraform IaC
+  # by requiring only "ci-gate" as a mandatory status check.
+  ci-gate:
+    name: "✅ [Gate Final] All Quality Gates Passed"
+    needs: ["lint-workflows", "fast-checks", "security-audit", "test-and-coverage", "miri-verification"]
+    if: ${{ always() }}
+    runs-on: "ubuntu-latest"
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: "Evaluate Upstream Gate Verdicts"
+        env:
+          GATE_FAILED: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: |
+          set -euo pipefail
+          if [ "$GATE_FAILED" = "true" ]; then
+            echo "::error::One or more mandatory quality gates failed or were cancelled."
+            exit 1
+          fi
+          echo "All quality gates succeeded."
