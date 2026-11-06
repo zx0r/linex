@@ -21,7 +21,7 @@ statty [WIDGET...] [OPTIONS]
 
 WIDGETS: cpu mem ssd git all (default: all)
 OPTIONS:
-  -s, --style <ansi|tmux|zsh|bash|none>
+  -s, --style <ansi|tmux|plain>
       --no-color
       --separator <S>
   -h, --help
@@ -105,9 +105,7 @@ fn parse_dialect(s: &[u8]) -> Result<Dialect, &'static [u8]> {
     match s {
         b"ansi" => Ok(Dialect::Ansi),
         b"tmux" => Ok(Dialect::Tmux),
-        b"zsh" => Ok(Dialect::Zsh),
-        b"bash" => Ok(Dialect::Bash),
-        b"none" => Ok(Dialect::Plain),
+        b"plain" => Ok(Dialect::Plain),
         _ => Err(&b"invalid style"[..]),
     }
 }

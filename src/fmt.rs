@@ -59,8 +59,6 @@ pub enum Dialect {
     Plain,
     Ansi,
     Tmux,
-    Zsh,
-    Bash,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -71,31 +69,29 @@ pub enum Color {
     Yellow,
     Red,
     Cyan,
+    Blue,
+    Magenta,
 }
 
-static STYLE: [[&[u8]; 5]; 5] = [
-    [b"", b"", b"", b"", b""],
+static STYLE: [[&[u8]; 7]; 3] = [
+    [b"", b"", b"", b"", b"", b"", b""],
     [
         b"\x1b[0m",
         b"\x1b[32m",
         b"\x1b[33m",
         b"\x1b[31m",
         b"\x1b[36m",
+        b"\x1b[34m",
+        b"\x1b[35m",
     ],
     [
-        b"#[fg=default]",
+        b"#[default]",
         b"#[fg=green]",
         b"#[fg=yellow]",
         b"#[fg=red]",
         b"#[fg=cyan]",
-    ],
-    [b"%f", b"%F{green}", b"%F{yellow}", b"%F{red}", b"%F{cyan}"],
-    [
-        b"\x01\x1b[0m\x02",
-        b"\x01\x1b[32m\x02",
-        b"\x01\x1b[33m\x02",
-        b"\x01\x1b[31m\x02",
-        b"\x01\x1b[36m\x02",
+        b"#[fg=blue]",
+        b"#[fg=magenta]",
     ],
 ];
 
@@ -147,7 +143,6 @@ pub fn text(out: &mut Out, d: Dialect, s: &[u8]) {
         match b {
             0..=0x1F | 0x7F => out.byte(b'?'),
             b'#' if d == Dialect::Tmux => out.push(b"##"),
-            b'%' if d == Dialect::Zsh => out.push(b"%%"),
             _ => out.byte(b),
         }
     }
@@ -211,28 +206,54 @@ pub fn git(out: &mut Out, d: Dialect, info: &crate::git::GitInfo) {
     if br.is_empty() {
         out.push(b":");
         if let Some(oid) = &info.oid {
-            for &b in oid {
-                out.byte(b"0123456789abcdef"[usize::from(b >> 4)]);
-                out.byte(b"0123456789abcdef"[usize::from(b & 0x0F)]);
-            }
-        }
-    } else {
-        text(out, d, br);
-        if let Some(oid) = &info.oid {
-            out.push(b":");
+            style(out, d, Color::Red);
             for &b in &oid[..4] {
                 out.byte(b"0123456789abcdef"[usize::from(b >> 4)]);
                 out.byte(b"0123456789abcdef"[usize::from(b & 0x0F)]);
             }
+            style(out, d, Color::Reset);
+        }
+    } else {
+        style(out, d, Color::Blue);
+        text(out, d, br);
+        style(out, d, Color::Reset);
+        if let Some(oid) = &info.oid {
+            out.push(b":");
+            style(out, d, Color::Magenta);
+            for &b in &oid[..4] {
+                out.byte(b"0123456789abcdef"[usize::from(b >> 4)]);
+                out.byte(b"0123456789abcdef"[usize::from(b & 0x0F)]);
+            }
+            style(out, d, Color::Reset);
         }
     }
     match info.op {
         GitOp::None => {}
-        GitOp::Merge => out.push(b"|MERGE"),
-        GitOp::Rebase => out.push(b"|REBASE"),
-        GitOp::CherryPick => out.push(b"|CHERRY"),
-        GitOp::Revert => out.push(b"|REVERT"),
-        GitOp::Bisect => out.push(b"|BISECT"),
+        GitOp::Merge => {
+            style(out, d, Color::Yellow);
+            out.push(b"|MERGE");
+            style(out, d, Color::Reset);
+        }
+        GitOp::Rebase => {
+            style(out, d, Color::Yellow);
+            out.push(b"|REBASE");
+            style(out, d, Color::Reset);
+        }
+        GitOp::CherryPick => {
+            style(out, d, Color::Yellow);
+            out.push(b"|CHERRY");
+            style(out, d, Color::Reset);
+        }
+        GitOp::Revert => {
+            style(out, d, Color::Yellow);
+            out.push(b"|REVERT");
+            style(out, d, Color::Reset);
+        }
+        GitOp::Bisect => {
+            style(out, d, Color::Yellow);
+            out.push(b"|BISECT");
+            style(out, d, Color::Reset);
+        }
     }
     match info.worktree {
         Worktree::Clean => {
@@ -285,5 +306,39 @@ mod tests {
         out.rollback(0);
         text(&mut out, Dialect::Tmux, b"branch#1");
         assert_eq!(out.as_bytes(), b"branch##1");
+    }
+
+    #[test]
+    fn git_formatting_semantic_colors() {
+        use crate::git::{GitInfo, GitOp, Worktree};
+        let mut out = Out::new();
+        let mut info = GitInfo {
+            branch: [0; 128],
+            branch_len: 4,
+            oid: Some([0x12, 0x34, 0x56, 0x78, 0, 0, 0, 0]),
+            op: GitOp::None,
+            worktree: Worktree::Clean,
+        };
+        info.branch[..4].copy_from_slice(b"main");
+
+        // Plain
+        git(&mut out, Dialect::Plain, &info);
+        assert_eq!(out.as_bytes(), "GIT main:12345678 ✓".as_bytes());
+
+        // Ansi
+        out.rollback(0);
+        git(&mut out, Dialect::Ansi, &info);
+        assert_eq!(
+            out.as_bytes(),
+            b"GIT \x1b[34mmain\x1b[0m:\x1b[35m12345678\x1b[0m\x1b[32m \xe2\x9c\x93\x1b[0m"
+        );
+
+        // Tmux
+        out.rollback(0);
+        git(&mut out, Dialect::Tmux, &info);
+        assert_eq!(
+            out.as_bytes(),
+            b"GIT #[fg=blue]main#[default]:#[fg=magenta]12345678#[default]#[fg=green] \xe2\x9c\x93#[default]"
+        );
     }
 }
