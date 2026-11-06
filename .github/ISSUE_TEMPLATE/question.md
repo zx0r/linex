@@ -1,6 +1,6 @@
 ---
 name: Question
-about: Ask a question regarding xstory architecture, shell hooks, or configuration.
+about: Ask a question regarding statty architecture, telemetry widgets, or configuration.
 title: "[QUESTION] "
 labels: ["question"]
 assignees: ''
@@ -10,8 +10,8 @@ assignees: ''
 <!-- What would you like to know or clarify? -->
 
 ## Context
-<!-- Describe your workflow, shell (bash/zsh/fish), terminal emulator, or OS. -->
+<!-- Describe your environment, tmux version, terminal emulator, or OS. -->
 
 ---
 > [!TIP]
-> For general discussions, shell hook tricks, or community Q&A, you can also join the [GitHub Discussions](https://github.com/zx0r/xstory/discussions).
+> For general discussions or community Q&A, you can also join the [GitHub Discussions](https://github.com/zx0r/statty/discussions).

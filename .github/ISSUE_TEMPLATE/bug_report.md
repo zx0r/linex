@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a reproducible defect or unexpected behavior in xstory.
+about: Report a reproducible defect or unexpected behavior in statty.
 title: "[BUG] "
 labels: ["bug"]
 assignees: ''
@@ -10,28 +10,23 @@ assignees: ''
 <!-- A clear and concise description of the bug. -->
 
 ## Reproduction Steps
-1. Shell: `bash` / `zsh` / `fish`
-2. Execute command: `xstory <args>`
-3. Observe error: `...`
+1. Execute command: `statty <args>`
+2. Observe error: `...`
 
 ## Expected Behavior
-<!-- What you expected xstory to do. -->
+<!-- What you expected statty to do. -->
 
 ## Diagnostic Environment
 Please run the following commands and paste the exact output:
 
 ```console
-$ xstory --version
-$ echo "$SHELL"
+$ statty --version
+$ statty -s ansi
 $ uname -a
+$ tmux -V
 ```
 
-## Relevant Configuration
-<!-- Include ~/.config/xstory/config.toml if applicable. -->
-```toml
-```
-
-## Terminal & Shell Trace
-<!-- Paste terminal output, stderr, or shell hook context. -->
+## Terminal & Output Trace
+<!-- Paste exact output, ANSI escape sequences, or tmux status line context. -->
 ```console
 ```

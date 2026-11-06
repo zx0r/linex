@@ -1,53 +1,32 @@
-# Contributing to xstory
+# Contributing to statty
 
-Thank you for considering contributing to **xstory**! This project thrives on community involvement, and we appreciate your time and effort.
+Thank you for considering contributing to **statty**!
 
-## Add an entry to the changelog
+## Guidelines & Principles
 
-Keeping the `CHANGELOG.md` file up-to-date makes the release process much easier and helps get your changes into a new **xstory** release faster. However, not every change requires a changelog entry.
+- **Zero External Dependencies**: `Cargo.toml` must not have external runtime dependencies (`[dependencies]` remains empty). All OS interactions go through `src/sys.rs` using direct POSIX / Darwin C ABI.
+- **Strict Codebase Budget**: Total line count across all `src/*.rs` must strictly remain $\le 1000$ lines.
+- **Zero Allocation**: Hot telemetry formatting paths must remain zero-heap allocation, using stack buffers (`Out`).
+- **Conventional Commits**: Commit messages must follow Conventional Commits 1.0.0.
 
-**Please update the changelog if your contribution contains changes regarding any of the following:**
-- The behavior of **xstory** (new commands, flags, or logic).
-- History recording, arena storage, or search matching logic.
-- The build system, linting, or CI workflows.
-- Performance improvements or bug fixes.
+## Quality Gates
 
-**A changelog entry is not necessary when:**
-- Updating documentation or examples.
-- Fixing typos or formatting.
+Before opening a pull request, ensure all checks pass:
 
-### Changelog entry format
-The top of the `CHANGELOG.md` contains an `[Unreleased]` section. Please add your entry to the subsection that best describes your change (Features, Bug Fixes, Performance, etc.).
-
-Entries must follow this format:
-```markdown
-- Short description of what has been changed, see #123 (@user)
-```
-Replace `#123` with your pull request number and `@user` with your GitHub username.
-
-## Development
-
-To get started with development, ensure you have a modern Rust toolchain installed (edition 2024 is used).
-
-### Adding a new feature
-Please consider opening a **Feature Request** issue first. This gives us a chance to discuss the specifics and technical direction before you invest significant time in building it.
-
-### Style and Standards
-- We follow standard Rust idioms and strict zero-allocation/zero-overhead performance principles.
-- Run `cargo fmt --all -- --check` before submitting.
-- Run `cargo clippy --all-targets -- -D warnings` to ensure code quality.
-
-## Regression tests
-
-You are strongly encouraged to add regression tests. They ensure that your contribution works as expected and stays working in the future.
-
-### Running Tests
-To run tests locally, you can use:
 ```bash
-cargo test
-# or with nextest
-cargo nextest run
+just check-all
 ```
 
-## Community and Communication
-If you have questions, feel free to reach out via GitHub Issues. We aim to keep **xstory** the fastest and most transparent shell history engine.
+This runs:
+- `cargo fmt --all -- --check`
+- `cargo clippy --all-targets --all-features -- -D warnings`
+- `cargo nextest run --all-targets`
+- `cargo deny check`
+- `gitleaks detect --no-banner`
+- `cargo machete`
+- `actionlint`
+- `zizmor`
+
+## Community & Questions
+
+If you have questions or ideas, feel free to open an issue or discussion on GitHub.

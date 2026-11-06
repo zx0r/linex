@@ -286,33 +286,38 @@ jobs:
           intel_mac = find_asset(all_artifacts, 'x86_64-apple-darwin')
           linux_x86 = find_asset(all_artifacts, 'x86_64-unknown-linux-gnu')
 
-          formula_path = "target/distrib/xstory.rb"
+          formula_path = "target/distrib/statty.rb"
 
           formula = <<~RUBY
-            class Xstory < Formula
-              desc "Minimalist Unix shell history engine"
-              homepage "https://github.com/zx0r/xstory"
-              version "#{version}"
+            class Statty < Formula
+              desc "Zero-dependency, zero-allocation telemetry widgets"
+              homepage "https://github.com/zx0r/statty"
+              license any_of: ["Apache-2.0", "MIT"]
 
-              if OS.mac? && Hardware::CPU.arm?
-                url "https://github.com/zx0r/xstory/releases/download/v#{version}/#{arm_mac['name']}"
-                sha256 "#{arm_mac['actual_sha256']}"
-              elsif OS.mac? && Hardware::CPU.intel?
-                url "https://github.com/zx0r/xstory/releases/download/v#{version}/#{intel_mac['name']}"
-                sha256 "#{intel_mac['actual_sha256']}"
-              elsif OS.linux? && Hardware::CPU.intel?
-                url "https://github.com/zx0r/xstory/releases/download/v#{version}/#{linux_x86['name']}"
-                sha256 "#{linux_x86['actual_sha256']}"
+              on_macos do
+                on_arm do
+                  url "https://github.com/zx0r/statty/releases/download/v#{version}/#{arm_mac['name']}"
+                  sha256 "#{arm_mac['actual_sha256']}"
+                end
+                on_intel do
+                  url "https://github.com/zx0r/statty/releases/download/v#{version}/#{intel_mac['name']}"
+                  sha256 "#{intel_mac['actual_sha256']}"
+                end
               end
 
-              license "MIT"
+              on_linux do
+                on_intel do
+                  url "https://github.com/zx0r/statty/releases/download/v#{version}/#{linux_x86['name']}"
+                  sha256 "#{linux_x86['actual_sha256']}"
+                end
+              end
 
               def install
-                bin.install "xstory"
+                bin.install "statty"
               end
 
               test do
-                system "\#{bin}/xstory", "--version"
+                assert_match "statty #{version}", shell_output("\#{bin}/statty --version")
               end
             end
           RUBY
@@ -499,9 +504,9 @@ jobs:
     #    Add rule: `v*` (Allows deployment only from release tags).
     #
     # --- PHASE 3: crates.io Trusted Publisher --------------------------------
-    # 1. Go to: https://crates.io/crates/xstory/settings/new-trusted-publisher
+    # 1. Go to: https://crates.io/crates/statty/settings/new-trusted-publisher
     # 2. Select "GitHub Actions".
-    # 3. Repository: `zx0r/xstory`
+    # 3. Repository: `zx0r/statty`
     # 4. Workflow name: `release.yml`
     # 5. Environment name: `crates.io` (Must match Phase 2).
     #

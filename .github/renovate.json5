@@ -3,7 +3,7 @@
 // =============================================================================
 // Standard: OpenSSF Scorecard L4 · Hermetic Toolchain · SLSA Level 3
 // Role: Autonomous Dependency Guardian & Automated Cryptographic Pinning
-// Target: xstory (.github/workflows/*.yml & Cargo ecosystem)
+// Target: statty (.github/workflows/*.yml & Cargo ecosystem)
 // =============================================================================
 
 {

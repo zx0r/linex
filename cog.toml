@@ -18,36 +18,29 @@ post_bump_hooks = [
     "git push origin {{version_tag}}",
 ]
 
-# Enforced commit scopes for xstory architecture
+# Enforced commit scopes for statty architecture
 scopes = [
-    "arena",
-    "audit",
+    "args",
+    "bench",
     "ci",
     "cli",
-    "config",
-    "core",
+    "cpu",
     "deps",
     "dist",
-    "ecosystem",
-    "error",
-    "history",
-    "hooks",
+    "docs",
+    "fmt",
+    "git",
     "infra",
     "main",
-    "palette",
-    "qa",
-    "readme",
-    "record",
+    "mem",
     "release",
     "renovate",
-    "search",
     "security",
-    "signals",
     "spec",
-    "store",
-    "syntax",
-    "theme",
-    "tui",
+    "ssd",
+    "state",
+    "sys",
+    "test",
 ]
 
 [commit_types]
@@ -68,4 +61,4 @@ path = "CHANGELOG.md"
 template = "remote"
 remote = "github.com"
 owner = "zx0r"
-repository = "xstory"
+repository = "statty"

@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Propose a functional enhancement or architectural feature for xstory.
+about: Propose a functional enhancement or architectural feature for statty.
 title: "[FEATURE] "
 labels: ["enhancement"]
 assignees: ''
@@ -10,15 +10,16 @@ assignees: ''
 <!-- Is your feature request related to a specific workflow problem? Describe clearly. -->
 
 ## Proposed Solution & CLI UX
-<!-- Describe how the CLI syntax, flag, or search behavior should look. -->
+<!-- Describe how the CLI syntax, widget, or output behavior should look. -->
 ```console
-$ xstory ...
+$ statty ...
 ```
 
 ## Architectural Considerations
-- [ ] Preserves sub-millisecond execution latency in shell prompt hooks.
-- [ ] Maintains zero-allocation memory-mapped storage integrity.
-- [ ] Compatible across Bash, Zsh, and Fish shell environments.
+- [ ] Preserves sub-millisecond execution latency.
+- [ ] Strictly zero runtime dependencies (POSIX / Darwin C ABI).
+- [ ] Zero heap allocation on telemetry hot path.
+- [ ] Codebase remains strictly $\le 1000$ lines.
 
 ## Alternatives Considered
 <!-- Any alternative implementations or workarounds you've evaluated. -->

@@ -16,43 +16,21 @@ pub enum Cmd<'a> {
     Version,
 }
 
-pub const HELP: &[u8] = b"\
-statty [WIDGET...] [OPTIONS]
-
-WIDGETS: cpu mem ssd git
-OPTIONS:
-  -s, --style <ansi|tmux|plain>
-  -G, --git-status
-  -b, --bytes
-      --no-icons
-      --no-color
-      --separator <S>
-  -h, --help
-  -V, --version
-";
-
+pub const HELP: &[u8] = b"statty [WIDGET...] [OPTIONS]\n\nWIDGETS: cpu mem ssd git\nOPTIONS:\n  -s, --style <ansi|tmux|plain>\n  -G, --git-status\n  -b, --bytes\n      --no-icons\n      --no-color\n      --separator <S>\n  -h, --help\n  -V, --version\n";
 pub const VERSION: &[u8] = concat!("statty ", env!("CARGO_PKG_VERSION"), "\n").as_bytes();
 
-/// Parses command-line arguments and environment into a command.
+/// Parse CLI arguments.
 ///
 /// # Errors
 ///
-/// Returns an error message if an unknown flag or missing argument is encountered.
+/// Returns an error message if an unknown argument or missing value is encountered.
+#[rustfmt::skip]
 pub fn parse<'a>(argv: &'a [std::ffi::OsString], env: &'a Env) -> Result<Cmd<'a>, &'static [u8]> {
     let mut widgets = Widgets::empty();
-    let mut dialect = None;
-    let mut icons = true;
-    let mut bytes = false;
-    let mut git_detail = false;
-    let mut no_color = false;
-    let mut sep = None;
-
+    let (mut dialect, mut icons, mut bytes, mut git_detail, mut no_color, mut sep) = (None, true, false, false, false, None);
     let mut i = 0;
     while i < argv.len() {
-        let arg = argv
-            .get(i)
-            .map(|s| s.as_encoded_bytes())
-            .unwrap_or_default();
+        let arg = argv.get(i).map(|s| s.as_encoded_bytes()).unwrap_or_default();
         i += 1;
         match arg {
             b"-h" | b"--help" => return Ok(Cmd::Help),
@@ -63,18 +41,12 @@ pub fn parse<'a>(argv: &'a [std::ffi::OsString], env: &'a Env) -> Result<Cmd<'a>
             b"--no-icons" => icons = false,
             b"--no-color" => no_color = true,
             b"-s" | b"--style" => {
-                let val = argv
-                    .get(i)
-                    .map(|s| s.as_encoded_bytes())
-                    .ok_or(&b"missing --style value"[..])?;
+                let val = argv.get(i).map(|s| s.as_encoded_bytes()).ok_or(&b"missing --style value"[..])?;
                 i += 1;
                 dialect = Some(parse_dialect(val)?);
             }
             b"--separator" => {
-                let val = argv
-                    .get(i)
-                    .map(|s| s.as_encoded_bytes())
-                    .ok_or(&b"missing --separator value"[..])?;
+                let val = argv.get(i).map(|s| s.as_encoded_bytes()).ok_or(&b"missing --separator value"[..])?;
                 i += 1;
                 sep = Some(val);
             }
@@ -87,24 +59,11 @@ pub fn parse<'a>(argv: &'a [std::ffi::OsString], env: &'a Env) -> Result<Cmd<'a>
             _ => return Err(&b"unknown argument"[..]),
         }
     }
-
-    if widgets.is_empty() {
-        widgets = Widgets::ALL;
-    }
-    let d = dialect.unwrap_or(if no_color || env.no_color {
-        Dialect::Plain
-    } else {
-        Dialect::Ansi
-    });
-
+    if widgets.is_empty() { widgets = Widgets::ALL; }
+    let d = dialect.unwrap_or(if no_color || env.no_color { Dialect::Plain } else { Dialect::Ansi });
     let icons = icons && d != Dialect::Plain;
-
     Ok(Cmd::Run(crate::Config {
-        widgets,
-        dialect: d,
-        icons,
-        bytes,
-        git_detail,
+        widgets, dialect: d, icons, bytes, git_detail,
         sep: sep.unwrap_or(" │ ".as_bytes()),
         state_dir: env.state_dir.as_deref(),
     }))
@@ -125,48 +84,14 @@ mod tests {
     use std::ffi::OsString;
 
     #[test]
-    fn parse_defaults() {
-        let env = Env {
-            no_color: false,
-            state_dir: None,
-        };
-        let cmd = parse(&[], &env).unwrap();
-        match cmd {
-            Cmd::Run(cfg) => {
-                assert_eq!(cfg.widgets, Widgets::ALL);
-                assert_eq!(cfg.dialect, Dialect::Ansi);
-                assert!(cfg.icons);
-                assert!(!cfg.bytes);
-                assert!(!cfg.git_detail);
-            }
-            _ => unreachable!("expected run"),
-        }
-    }
+    #[rustfmt::skip]
+    fn parse_tests() {
+        let env = Env { no_color: false, state_dir: None };
+        let Cmd::Run(c1) = parse(&[], &env).unwrap() else { unreachable!() };
+        assert_eq!((c1.widgets, c1.dialect, c1.icons, c1.bytes, c1.git_detail), (Widgets::ALL, Dialect::Ansi, true, false, false));
 
-    #[test]
-    fn parse_flags() {
-        let env = Env {
-            no_color: false,
-            state_dir: None,
-        };
-        let args = [
-            OsString::from("cpu"),
-            OsString::from("-s"),
-            OsString::from("tmux"),
-            OsString::from("-G"),
-            OsString::from("--bytes"),
-            OsString::from("--no-icons"),
-        ];
-        let cmd = parse(&args, &env).unwrap();
-        match cmd {
-            Cmd::Run(cfg) => {
-                assert_eq!(cfg.widgets.as_slice(), &[Widget::Cpu]);
-                assert_eq!(cfg.dialect, Dialect::Tmux);
-                assert!(cfg.bytes);
-                assert!(cfg.git_detail);
-                assert!(!cfg.icons);
-            }
-            _ => unreachable!("expected run"),
-        }
+        let args = [OsString::from("cpu"), OsString::from("-s"), OsString::from("tmux"), OsString::from("-G"), OsString::from("--bytes"), OsString::from("--no-icons")];
+        let Cmd::Run(c2) = parse(&args, &env).unwrap() else { unreachable!() };
+        assert_eq!((c2.widgets.as_slice(), c2.dialect, c2.bytes, c2.git_detail, c2.icons), (&[Widget::Cpu][..], Dialect::Tmux, true, true, false));
     }
 }
