@@ -5,6 +5,7 @@ use std::ffi::{CStr, OsStr};
 type CInt = i32;
 type CSize = usize;
 type CSsize = isize;
+type CChar = core::ffi::c_char;
 
 pub const O_RDONLY: CInt = 0;
 pub const O_RDWR: CInt = 2;
@@ -12,6 +13,9 @@ pub const O_RDWR: CInt = 2;
 #[rustfmt::skip] pub const O_DIRECTORY: CInt = if cfg!(target_os = "macos") { 0x0010_0000 } else { 0o200_000 };
 #[rustfmt::skip] pub const O_CLOEXEC: CInt = if cfg!(target_os = "macos") { 0x0100_0000 } else { 0o2_000_000 };
 #[rustfmt::skip] pub const O_NOFOLLOW: CInt = if cfg!(target_os = "macos") { 0x0100 } else { 0o400_000 };
+
+#[rustfmt::skip] pub const AT_FDCWD: CInt = if cfg!(target_os = "macos") { -2 } else { -100 };
+#[rustfmt::skip] pub const AT_SYMLINK_NOFOLLOW: CInt = if cfg!(target_os = "macos") { 0x0020 } else { 0x0100 };
 
 pub const S_IFMT: u32 = 0o170_000;
 pub const S_IFDIR: u32 = 0o040_000;
@@ -46,7 +50,7 @@ pub struct StatFs {
 pub struct StatVfs {
     pub f_bsize: usize, pub f_frsize: usize, pub f_blocks: u64, pub f_bfree: u64, pub f_bavail: u64,
     pub f_files: u64, pub f_ffree: u64, pub f_favail: u64, pub f_fsid: usize, pub f_flag: usize,
-    pub f_namemax: usize, pub __f_spare: [CInt; 6],
+    pub f_namemax: usize, _f_spare: [CInt; 6],
 }
 
 #[repr(C, align(8))]
@@ -57,20 +61,20 @@ pub struct StatStub {
 
 #[rustfmt::skip]
 unsafe extern "C" {
-    #[link_name = "open"] fn c_open(p: *const i8, f: CInt, ...) -> CInt;
-    #[link_name = "openat"] fn c_openat(d: CInt, p: *const i8, f: CInt, ...) -> CInt;
+    #[link_name = "open"] fn c_open(p: *const CChar, f: CInt, ...) -> CInt;
+    #[link_name = "openat"] fn c_openat(d: CInt, p: *const CChar, f: CInt, ...) -> CInt;
     #[link_name = "close"] fn c_close(fd: CInt) -> CInt;
     #[link_name = "read"] fn c_read(fd: CInt, b: *mut u8, c: CSize) -> CSsize;
     #[link_name = "pread"] fn c_pread(fd: CInt, b: *mut u8, c: CSize, o: i64) -> CSsize;
     #[link_name = "pwrite"] fn c_pwrite(fd: CInt, b: *const u8, c: CSize, o: i64) -> CSsize;
     #[link_name = "write"] fn c_write(fd: CInt, b: *const u8, c: CSize) -> CSsize;
-    #[link_name = "fstatat"] fn c_fstatat(d: CInt, p: *const i8, s: *mut StatStub, f: CInt) -> CInt;
-    #[link_name = "faccessat"] fn c_faccessat(d: CInt, p: *const i8, m: CInt, f: CInt) -> CInt;
-    #[link_name = "getcwd"] fn c_getcwd(b: *mut i8, s: CSize) -> *mut i8;
+    #[link_name = "fstatat"] fn c_fstatat(d: CInt, p: *const CChar, s: *mut StatStub, f: CInt) -> CInt;
+    #[link_name = "faccessat"] fn c_faccessat(d: CInt, p: *const CChar, m: CInt, f: CInt) -> CInt;
+    #[link_name = "getcwd"] fn c_getcwd(b: *mut CChar, s: CSize) -> *mut CChar;
     #[link_name = "getuid"] fn c_getuid() -> u32;
     pub fn getpagesize() -> CInt;
 
-    #[cfg(target_os = "macos")] pub fn statfs(path: *const i8, buf: *mut StatFs) -> CInt;
+    #[cfg(target_os = "macos")] pub fn statfs(path: *const CChar, buf: *mut StatFs) -> CInt;
     #[cfg(target_os = "macos")] pub fn sysctl(n: *const CInt, nl: u32, op: *mut core::ffi::c_void, ol: *mut CSize, np: *mut core::ffi::c_void, nl2: CSize) -> CInt;
     #[cfg(target_os = "macos")] pub fn mach_host_self() -> u32;
     #[cfg(target_os = "macos")] pub fn mach_task_self() -> u32;
@@ -78,7 +82,7 @@ unsafe extern "C" {
     #[cfg(target_os = "macos")] pub fn host_statistics64(host: u32, flavor: CInt, info: *mut i32, count: *mut u32) -> CInt;
     #[cfg(target_os = "macos")] pub fn mach_port_deallocate(task: u32, name: u32) -> CInt;
 
-    #[cfg(target_os = "linux")] pub fn statvfs(path: *const i8, buf: *mut StatVfs) -> CInt;
+    #[cfg(target_os = "linux")] pub fn statvfs(path: *const CChar, buf: *mut StatVfs) -> CInt;
 }
 
 #[derive(Debug)]
@@ -163,12 +167,14 @@ pub fn getcwd_stack(buf: &mut [u8]) -> Option<usize> {
 pub fn lstat_mode(path: &CStr) -> Option<u32> {
     let mut st = core::mem::MaybeUninit::<StatStub>::uninit();
     // SAFETY: path is null-terminated, st pointer is valid for writing.
-    let rc = unsafe { c_fstatat(-2, path.as_ptr(), st.as_mut_ptr(), 0x0020) };
+    let rc = unsafe { c_fstatat(AT_FDCWD, path.as_ptr(), st.as_mut_ptr(), AT_SYMLINK_NOFOLLOW) };
     if rc != 0 { return None; }
     // SAFETY: c_fstatat succeeded.
     let st = unsafe { st.assume_init() };
     let mode = if cfg!(target_os = "macos") {
         u32::from(u16::from_ne_bytes([st.pad[4], st.pad[5]]))
+    } else if cfg!(target_arch = "x86_64") {
+        u32::from_ne_bytes([st.pad[24], st.pad[25], st.pad[26], st.pad[27]])
     } else {
         u32::from_ne_bytes([st.pad[16], st.pad[17], st.pad[18], st.pad[19]])
     };

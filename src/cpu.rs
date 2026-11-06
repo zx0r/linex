@@ -60,12 +60,12 @@ pub fn read() -> Option<Ticks> {
     let bytes = crate::sys::read_file(c"/proc/stat", &mut buf)?;
     let line = bytes.strip_prefix(b"cpu ")?.split(|&b| b == b'\n').next()?;
     let mut it = line.split(|&b| b == b' ').filter(|s| !s.is_empty());
-    let mut f = [0u64; 8];
-    for slot in &mut f {
+    let mut fields = [0u64; 8];
+    for slot in &mut fields {
         if let Some(tok) = it.next() { *slot = crate::parse_u64(tok)?; } else { break; }
     }
-    let [u, n, s, i, io, irq, sirq, st] = f;
-    Some(Ticks { busy: u + n + s + irq + sirq + st, idle: i + io })
+    let [user, nice, system, idle, iowait, irq, softirq, steal] = fields;
+    Some(Ticks { busy: user + nice + system + irq + softirq + steal, idle: idle + iowait })
 }
 
 #[cfg(target_os = "macos")]
