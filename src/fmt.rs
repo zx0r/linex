@@ -272,8 +272,56 @@ pub fn ssd(out: &mut Out, d: Dialect, icons: bool, bytes: bool, info: Option<cra
     }
 }
 
-pub fn git(out: &mut Out, d: Dialect, icons: bool, info: &crate::git::GitInfo) {
-    use crate::git::{GitOp, Worktree};
+fn git_op(out: &mut Out, d: Dialect, op: crate::git::GitOp) {
+    use crate::git::GitOp;
+    let label: &[u8] = match op {
+        GitOp::None => return,
+        GitOp::Merge => b"|MERGE",
+        GitOp::Rebase => b"|REBASE",
+        GitOp::CherryPick => b"|CHERRY",
+        GitOp::Revert => b"|REVERT",
+        GitOp::Bisect => b"|BISECT",
+    };
+    style(out, d, Color::Yellow);
+    out.push(label);
+    style(out, d, Color::Reset);
+}
+
+fn git_detail_breakdown(out: &mut Out, d: Dialect, info: &crate::git::GitStatus) {
+    let has_items = info.staged > 0
+        || info.unstaged > 0
+        || info.untracked > 0
+        || info.conflicted > 0
+        || info.stashed > 0;
+    if !has_items {
+        return;
+    }
+    out.push(b" [");
+    let mut first = true;
+    let counters: [(u16, u8, Color); 5] = [
+        (info.staged, b'+', Color::Green),
+        (info.unstaged, b'!', Color::Yellow),
+        (info.untracked, b'?', Color::Blue),
+        (info.conflicted, b'u', Color::Red),
+        (info.stashed, b'$', Color::Magenta),
+    ];
+    for (val, sym, col) in counters {
+        if val > 0 {
+            if !first {
+                out.byte(b' ');
+            }
+            style(out, d, col);
+            out.byte(sym);
+            u64(out, u64::from(val));
+            style(out, d, Color::Reset);
+            first = false;
+        }
+    }
+    out.byte(b']');
+}
+
+pub fn git(out: &mut Out, d: Dialect, icons: bool, detail: bool, info: &crate::git::GitStatus) {
+    use crate::git::Worktree;
     let br = &info.branch[..usize::from(info.branch_len)];
     if br.is_empty() {
         style(out, d, Color::Red);
@@ -306,7 +354,7 @@ pub fn git(out: &mut Out, d: Dialect, icons: bool, info: &crate::git::GitInfo) {
         text(out, d, br);
         style(out, d, Color::Reset);
 
-        if info.worktree == Worktree::Modified {
+        if !detail && info.worktree == Worktree::Modified {
             style(out, d, Color::Yellow);
             out.byte(b'*');
             style(out, d, Color::Reset);
@@ -328,7 +376,32 @@ pub fn git(out: &mut Out, d: Dialect, icons: bool, info: &crate::git::GitInfo) {
             style(out, d, Color::Reset);
         }
 
-        if info.worktree == Worktree::Clean {
+        if info.is_gone {
+            out.byte(b' ');
+            style(out, d, Color::Red);
+            out.push("⌫".as_bytes());
+            style(out, d, Color::Reset);
+        } else if info.ahead > 0 || info.behind > 0 {
+            out.byte(b' ');
+            if info.ahead > 0 {
+                style(out, d, Color::Cyan);
+                out.push("⇡".as_bytes());
+                u64(out, u64::from(info.ahead));
+                style(out, d, Color::Reset);
+            }
+            if info.behind > 0 {
+                style(out, d, Color::Yellow);
+                out.push("⇣".as_bytes());
+                u64(out, u64::from(info.behind));
+                style(out, d, Color::Reset);
+            }
+        }
+
+        if detail {
+            git_detail_breakdown(out, d, info);
+        }
+
+        if info.worktree == Worktree::Clean && info.conflicted == 0 {
             style(out, d, Color::Green);
             out.push(" ✓".as_bytes());
             style(out, d, Color::Reset);
@@ -337,34 +410,7 @@ pub fn git(out: &mut Out, d: Dialect, icons: bool, info: &crate::git::GitInfo) {
         }
     }
 
-    match info.op {
-        GitOp::None => {}
-        GitOp::Merge => {
-            style(out, d, Color::Yellow);
-            out.push(b"|MERGE");
-            style(out, d, Color::Reset);
-        }
-        GitOp::Rebase => {
-            style(out, d, Color::Yellow);
-            out.push(b"|REBASE");
-            style(out, d, Color::Reset);
-        }
-        GitOp::CherryPick => {
-            style(out, d, Color::Yellow);
-            out.push(b"|CHERRY");
-            style(out, d, Color::Reset);
-        }
-        GitOp::Revert => {
-            style(out, d, Color::Yellow);
-            out.push(b"|REVERT");
-            style(out, d, Color::Reset);
-        }
-        GitOp::Bisect => {
-            style(out, d, Color::Yellow);
-            out.push(b"|BISECT");
-            style(out, d, Color::Reset);
-        }
-    }
+    git_op(out, d, info.op);
 }
 
 pub fn git_err(out: &mut Out, _d: Dialect, icons: bool) {
@@ -412,33 +458,50 @@ mod tests {
 
     #[test]
     fn git_formatting_icons_and_semantic_colors() {
-        use crate::git::{GitInfo, GitOp, Worktree};
+        use crate::git::{GitOp, GitStatus, Worktree};
         let mut out = Out::new();
-        let mut info = GitInfo {
+        let mut info = GitStatus {
             branch: [0; 128],
             branch_len: 4,
+            is_detached: false,
             oid: Some([0x7b, 0x84, 0x96, 0xab, 0, 0, 0, 0]),
+            ahead: 1,
+            behind: 2,
+            is_gone: false,
             op: GitOp::None,
+            staged: 3,
+            unstaged: 2,
+            untracked: 1,
+            conflicted: 0,
+            stashed: 1,
             worktree: Worktree::Clean,
         };
         info.branch[..4].copy_from_slice(b"main");
 
         // Plain text mode
-        git(&mut out, Dialect::Plain, false, &info);
-        assert_eq!(out.as_bytes(), "GIT main (7b8496a) ✓".as_bytes());
+        git(&mut out, Dialect::Plain, false, false, &info);
+        assert_eq!(out.as_bytes(), "GIT main (7b8496a) ⇡1⇣2 ✓".as_bytes());
 
-        // Ansi with icons (icon in blue scope, sha with parentheses in magenta scope)
+        // Ansi with icons compact
         out.rollback(0);
-        git(&mut out, Dialect::Ansi, true, &info);
+        git(&mut out, Dialect::Ansi, true, false, &info);
         assert_eq!(
             out.as_bytes(),
-            b"\x1b[34m\xef\x90\x98 main\x1b[0m \x1b[35m(7b8496a)\x1b[0m\x1b[32m \xe2\x9c\x93\x1b[0m"
+            b"\x1b[34m\xef\x90\x98 main\x1b[0m \x1b[35m(7b8496a)\x1b[0m \x1b[36m\xe2\x87\xa11\x1b[0m\x1b[33m\xe2\x87\xa32\x1b[0m\x1b[32m \xe2\x9c\x93\x1b[0m"
+        );
+
+        // Detailed mode
+        out.rollback(0);
+        git(&mut out, Dialect::Plain, false, true, &info);
+        assert_eq!(
+            out.as_bytes(),
+            "GIT main (7b8496a) ⇡1⇣2 [+3 !2 ?1 $1] ✓".as_bytes()
         );
 
         // Modified worktree
         info.worktree = Worktree::Modified;
         out.rollback(0);
-        git(&mut out, Dialect::Plain, true, &info);
-        assert_eq!(out.as_bytes(), " main* (7b8496a)".as_bytes());
+        git(&mut out, Dialect::Plain, true, false, &info);
+        assert_eq!(out.as_bytes(), " main* (7b8496a) ⇡1⇣2".as_bytes());
     }
 }

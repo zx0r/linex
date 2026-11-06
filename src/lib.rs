@@ -65,6 +65,7 @@ pub struct Config<'a> {
     pub dialect: fmt::Dialect,
     pub icons: bool,
     pub bytes: bool,
+    pub git_detail: bool,
     pub sep: &'a [u8],
     pub state_dir: Option<&'a OsStr>,
 }
@@ -122,7 +123,7 @@ pub fn render(cfg: &Config<'_>, out: &mut fmt::Out) -> bool {
             }
             Widget::Git => match git::read() {
                 Ok(Some(g)) => {
-                    fmt::git(out, cfg.dialect, cfg.icons, &g);
+                    fmt::git(out, cfg.dialect, cfg.icons, cfg.git_detail, &g);
                     true
                 }
                 Ok(None) => true,

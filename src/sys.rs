@@ -250,6 +250,29 @@ pub fn lstat_mode(path: &CStr) -> Option<u32> {
     Some(mode)
 }
 
+pub fn mtime_at(dir: &Fd, path: &CStr) -> Option<i64> {
+    let mut st = core::mem::MaybeUninit::<StatStub>::uninit();
+    // SAFETY: dir.0 is an open descriptor, path is a null-terminated C string, st is valid.
+    let rc = unsafe { c_fstatat(dir.0, path.as_ptr(), st.as_mut_ptr(), 0) };
+    if rc != 0 {
+        return None;
+    }
+    // SAFETY: c_fstatat succeeded and initialized the buffer.
+    let st = unsafe { st.assume_init() };
+    let mtime = if cfg!(target_os = "macos") {
+        i64::from_ne_bytes([
+            st.pad[48], st.pad[49], st.pad[50], st.pad[51], st.pad[52], st.pad[53], st.pad[54],
+            st.pad[55],
+        ])
+    } else {
+        i64::from_ne_bytes([
+            st.pad[88], st.pad[89], st.pad[90], st.pad[91], st.pad[92], st.pad[93], st.pad[94],
+            st.pad[95],
+        ])
+    };
+    Some(mtime)
+}
+
 #[derive(Debug)]
 pub struct Map {
     ptr: *mut u8,

@@ -26,13 +26,25 @@ pub enum Worktree {
 pub struct GitError;
 
 #[derive(Clone, Copy, Debug)]
-pub struct GitInfo {
+#[repr(C)]
+pub struct GitStatus {
     pub branch: [u8; 128],
     pub branch_len: u8,
+    pub is_detached: bool,
     pub oid: Option<[u8; 8]>,
+    pub ahead: u16,
+    pub behind: u16,
+    pub is_gone: bool,
     pub op: GitOp,
+    pub staged: u16,
+    pub unstaged: u16,
+    pub untracked: u16,
+    pub conflicted: u16,
+    pub stashed: u16,
     pub worktree: Worktree,
 }
+
+pub type GitInfo = GitStatus;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Head<'a> {
@@ -95,6 +107,130 @@ fn detect_op(git_fd: &Fd) -> GitOp {
     }
 }
 
+#[allow(clippy::naive_bytecount, reason = "zero-dep bounded 1KB buffer")]
+fn count_stash(git_fd: &Fd) -> u16 {
+    let mut buf = [0u8; 1024];
+    if let Some(data) = sys::readat(git_fd, c"logs/refs/stash", &mut buf) {
+        let count = data.iter().filter(|&&b| b == b'\n').count();
+        u16::try_from(count).unwrap_or(u16::MAX)
+    } else {
+        0
+    }
+}
+
+fn trim_ascii(b: &[u8]) -> &[u8] {
+    let start = b
+        .iter()
+        .position(|&c| c != b' ' && c != b'\t' && c != b'\r')
+        .unwrap_or(b.len());
+    let end = b
+        .iter()
+        .rposition(|&c| c != b' ' && c != b'\t' && c != b'\r')
+        .map_or(start, |p| p + 1);
+    &b[start..end]
+}
+
+fn resolve_upstream(
+    git_fd: &Fd,
+    common_fd: &Fd,
+    branch_name: &[u8],
+    local_oid: Option<[u8; 8]>,
+) -> (u16, u16, bool) {
+    let mut cbuf = [0u8; 4096];
+    let Some(conf) = sys::readat(common_fd, c"config", &mut cbuf) else {
+        return (0, 0, false);
+    };
+
+    let mut needle = [0u8; 140];
+    let pref = b"[branch \"";
+    needle[..pref.len()].copy_from_slice(pref);
+    needle[pref.len()..pref.len() + branch_name.len()].copy_from_slice(branch_name);
+    needle[pref.len() + branch_name.len()..pref.len() + branch_name.len() + 2]
+        .copy_from_slice(b"\"]");
+    let target = &needle[..pref.len() + branch_name.len() + 2];
+
+    let mut remote: Option<&[u8]> = None;
+    let mut merge: Option<&[u8]> = None;
+
+    if let Some(pos) = conf.windows(target.len()).position(|w| w == target) {
+        let sec = &conf[pos + target.len()..];
+        for line in sec.split(|&b| b == b'\n') {
+            let tr = trim_ascii(line);
+            if tr.starts_with(b"[") {
+                break;
+            }
+            if let Some(val) = tr.strip_prefix(b"remote =") {
+                remote = Some(trim_ascii(val));
+            } else if let Some(val) = tr.strip_prefix(b"remote=") {
+                remote = Some(trim_ascii(val));
+            } else if let Some(val) = tr.strip_prefix(b"merge =") {
+                merge = Some(trim_ascii(val));
+            } else if let Some(val) = tr.strip_prefix(b"merge=") {
+                merge = Some(trim_ascii(val));
+            }
+        }
+    }
+
+    let (Some(rem), Some(mrg)) = (remote, merge) else {
+        return (0, 0, false);
+    };
+
+    let branch_short = mrg.strip_prefix(b"refs/heads/").unwrap_or(mrg);
+    let mut ref_path = [0u8; 256];
+    let rpref = b"refs/remotes/";
+    ref_path[..rpref.len()].copy_from_slice(rpref);
+    let mut cur = rpref.len();
+    ref_path[cur..cur + rem.len()].copy_from_slice(rem);
+    cur += rem.len();
+    ref_path[cur] = b'/';
+    cur += 1;
+    ref_path[cur..cur + branch_short.len()].copy_from_slice(branch_short);
+    cur += branch_short.len();
+    ref_path[cur] = 0;
+
+    // SAFETY: ref_path contains explicit null terminator at cur.
+    let rcstr = unsafe { CStr::from_bytes_with_nul_unchecked(&ref_path[..=cur]) };
+    let mut obuf = [0u8; 64];
+    let mut remote_oid = None;
+
+    if let Some(raw) = sys::readat(common_fd, rcstr, &mut obuf) {
+        let mut oid = [0u8; 8];
+        hex_to_bin(&raw[..raw.len().min(16)], &mut oid);
+        remote_oid = Some(oid);
+    } else if let Some(map) = sys::map_at(common_fd, c"packed-refs")
+        && let Some(hex) = find_packed_ref(map.as_bytes(), &ref_path[..cur])
+    {
+        let mut oid = [0u8; 8];
+        hex_to_bin(&hex[..hex.len().min(16)], &mut oid);
+        remote_oid = Some(oid);
+    }
+
+    match (local_oid, remote_oid) {
+        (Some(l), Some(r)) => {
+            if l == r {
+                (0, 0, false)
+            } else {
+                let mut log_buf = [0u8; 4096];
+                let ahead_detected =
+                    if let Some(log) = sys::readat(git_fd, c"logs/HEAD", &mut log_buf) {
+                        let mut r_hex = [0u8; 16];
+                        bin_to_hex(&r, &mut r_hex);
+                        log.windows(16).any(|w| w == r_hex)
+                    } else {
+                        false
+                    };
+                if ahead_detected {
+                    (1, 0, false)
+                } else {
+                    (0, 1, false)
+                }
+            }
+        }
+        (Some(_), None) => (0, 0, true),
+        _ => (0, 0, false),
+    }
+}
+
 fn discover_root(cwd: &mut [u8], cwd_len: usize) -> Option<usize> {
     let mut root_len = None;
     let mut k = cwd_len;
@@ -124,7 +260,7 @@ fn discover_root(cwd: &mut [u8], cwd_len: usize) -> Option<usize> {
 /// # Errors
 ///
 /// Returns `GitError` if directory probing or repository I/O encounters a fatal failure.
-pub fn read() -> Result<Option<GitInfo>, GitError> {
+pub fn read() -> Result<Option<GitStatus>, GitError> {
     let mut cwd = [0u8; 1024];
     let cwd_len = sys::getcwd_stack(&mut cwd).ok_or(GitError)?;
     let Some(r_len) = discover_root(&mut cwd, cwd_len) else {
@@ -185,19 +321,28 @@ pub fn read() -> Result<Option<GitInfo>, GitError> {
     let head = sys::readat(&git_fd, c"HEAD", &mut hbuf).ok_or(GitError)?;
     let parsed_head = parse_head(head);
 
-    let mut info = GitInfo {
+    let mut status = GitStatus {
         branch: [0; 128],
         branch_len: 0,
+        is_detached: false,
         oid: None,
+        ahead: 0,
+        behind: 0,
+        is_gone: false,
         op: detect_op(&git_fd),
+        staged: 0,
+        unstaged: 0,
+        untracked: 0,
+        conflicted: 0,
+        stashed: count_stash(&git_fd),
         worktree: Worktree::Unknown,
     };
 
     match parsed_head {
         Some(Head::Branch(name)) => {
             let len = name.len().min(128);
-            info.branch[..len].copy_from_slice(&name[..len]);
-            info.branch_len = u8::try_from(len).unwrap_or(128);
+            status.branch[..len].copy_from_slice(&name[..len]);
+            status.branch_len = u8::try_from(len).unwrap_or(128);
 
             // Resolve OID: refs/heads/<name>
             let mut rbuf = [0u8; 256];
@@ -213,34 +358,50 @@ pub fn read() -> Result<Option<GitInfo>, GitError> {
             if let Some(raw) = sys::readat(common_fd, rcstr, &mut obuf) {
                 let mut oid = [0u8; 8];
                 hex_to_bin(&raw[..raw.len().min(16)], &mut oid);
-                info.oid = Some(oid);
+                status.oid = Some(oid);
             } else if let Some(map) = sys::map_at(common_fd, c"packed-refs") {
                 let refname = &rbuf[..pref.len() + name.len()];
                 if let Some(hex) = find_packed_ref(map.as_bytes(), refname) {
                     let mut oid = [0u8; 8];
                     hex_to_bin(&hex[..hex.len().min(16)], &mut oid);
-                    info.oid = Some(oid);
+                    status.oid = Some(oid);
                 }
             }
+
+            let (a, b, gone) = resolve_upstream(&git_fd, common_fd, name, status.oid);
+            status.ahead = a;
+            status.behind = b;
+            status.is_gone = gone;
         }
         Some(Head::Detached(hex)) => {
+            status.is_detached = true;
             let mut oid = [0u8; 8];
             hex_to_bin(&hex[..hex.len().min(16)], &mut oid);
-            info.oid = Some(oid);
+            status.oid = Some(oid);
         }
         None => {}
     }
 
-    // Worktree state: quick index check
+    // Worktree state: quick index check + mtime delta
     if let Some(map) = sys::map_at(&git_fd, c"index")
-        && let Some((ver, count)) = parse_index_header(map.as_bytes())
-        && (ver == 2 || ver == 3)
-        && count > 0
+        && let Some((ver, _count)) = parse_index_header(map.as_bytes())
+        && (ver == 2 || ver == 3 || ver == 4)
     {
-        info.worktree = Worktree::Clean;
+        let idx_mtime = sys::mtime_at(&git_fd, c"index");
+        let head_mtime = sys::mtime_at(&git_fd, c"HEAD");
+        if let (Some(idx), Some(head)) = (idx_mtime, head_mtime) {
+            if idx > head {
+                status.worktree = Worktree::Modified;
+                status.unstaged = 1;
+            } else {
+                status.worktree = Worktree::Clean;
+            }
+        } else {
+            status.worktree = Worktree::Clean;
+        }
     }
 
-    Ok(Some(info))
+    Ok(Some(status))
 }
 
 fn hex_to_bin(hex: &[u8], out: &mut [u8]) {
@@ -260,6 +421,16 @@ fn hex_to_bin(hex: &[u8], out: &mut [u8]) {
         out[j] = (h << 4) | l;
         i += 2;
         j += 1;
+    }
+}
+
+fn bin_to_hex(bin: &[u8], out: &mut [u8]) {
+    let hex = b"0123456789abcdef";
+    for (i, &b) in bin.iter().enumerate() {
+        if i * 2 + 1 < out.len() {
+            out[i * 2] = hex[usize::from(b >> 4)];
+            out[i * 2 + 1] = hex[usize::from(b & 0x0F)];
+        }
     }
 }
 

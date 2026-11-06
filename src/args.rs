@@ -19,9 +19,10 @@ pub enum Cmd<'a> {
 pub const HELP: &[u8] = b"\
 statty [WIDGET...] [OPTIONS]
 
-WIDGETS: cpu mem ssd git all (default: all)
+WIDGETS: cpu mem ssd git
 OPTIONS:
   -s, --style <ansi|tmux|plain>
+  -G, --git-status
   -b, --bytes
       --no-icons
       --no-color
@@ -42,6 +43,7 @@ pub fn parse<'a>(argv: &'a [std::ffi::OsString], env: &'a Env) -> Result<Cmd<'a>
     let mut dialect = None;
     let mut icons = true;
     let mut bytes = false;
+    let mut git_detail = false;
     let mut no_color = false;
     let mut sep = None;
 
@@ -55,6 +57,7 @@ pub fn parse<'a>(argv: &'a [std::ffi::OsString], env: &'a Env) -> Result<Cmd<'a>
         match arg {
             b"-h" | b"--help" => return Ok(Cmd::Help),
             b"-V" | b"--version" => return Ok(Cmd::Version),
+            b"-G" | b"--git-status" => git_detail = true,
             b"-b" | b"--bytes" => bytes = true,
             b"-i" | b"--icons" => icons = true,
             b"--no-icons" => icons = false,
@@ -81,12 +84,6 @@ pub fn parse<'a>(argv: &'a [std::ffi::OsString], env: &'a Env) -> Result<Cmd<'a>
             b"mem" => widgets.push(Widget::Mem),
             b"ssd" => widgets.push(Widget::Ssd),
             b"git" => widgets.push(Widget::Git),
-            b"all" => {
-                widgets.push(Widget::Cpu);
-                widgets.push(Widget::Mem);
-                widgets.push(Widget::Ssd);
-                widgets.push(Widget::Git);
-            }
             _ => return Err(&b"unknown argument"[..]),
         }
     }
@@ -107,6 +104,7 @@ pub fn parse<'a>(argv: &'a [std::ffi::OsString], env: &'a Env) -> Result<Cmd<'a>
         dialect: d,
         icons,
         bytes,
+        git_detail,
         sep: sep.unwrap_or(" │ ".as_bytes()),
         state_dir: env.state_dir.as_deref(),
     }))
@@ -139,6 +137,7 @@ mod tests {
                 assert_eq!(cfg.dialect, Dialect::Ansi);
                 assert!(cfg.icons);
                 assert!(!cfg.bytes);
+                assert!(!cfg.git_detail);
             }
             _ => unreachable!("expected run"),
         }
@@ -154,6 +153,7 @@ mod tests {
             OsString::from("cpu"),
             OsString::from("-s"),
             OsString::from("tmux"),
+            OsString::from("-G"),
             OsString::from("--bytes"),
             OsString::from("--no-icons"),
         ];
@@ -163,6 +163,7 @@ mod tests {
                 assert_eq!(cfg.widgets.as_slice(), &[Widget::Cpu]);
                 assert_eq!(cfg.dialect, Dialect::Tmux);
                 assert!(cfg.bytes);
+                assert!(cfg.git_detail);
                 assert!(!cfg.icons);
             }
             _ => unreachable!("expected run"),

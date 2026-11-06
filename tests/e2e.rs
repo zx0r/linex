@@ -3,7 +3,6 @@ use std::process::Command;
 #[test]
 fn test_cli_all_widgets_default_icons() {
     let output = Command::new(env!("CARGO_BIN_EXE_statty"))
-        .arg("all")
         .output()
         .expect("failed to execute process");
 
@@ -17,7 +16,7 @@ fn test_cli_all_widgets_default_icons() {
 #[test]
 fn test_cli_all_widgets_no_icons() {
     let output = Command::new(env!("CARGO_BIN_EXE_statty"))
-        .args(["--no-icons", "all"])
+        .arg("--no-icons")
         .output()
         .expect("failed to execute process");
 
@@ -41,9 +40,33 @@ fn test_cli_individual_widgets() {
 }
 
 #[test]
+fn test_cli_git_widget() {
+    let output = Command::new(env!("CARGO_BIN_EXE_statty"))
+        .arg("git")
+        .output()
+        .expect("failed to execute process");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains('\u{f418}'));
+}
+
+#[test]
+fn test_cli_git_status_detailed() {
+    let output = Command::new(env!("CARGO_BIN_EXE_statty"))
+        .args(["git", "-G"])
+        .output()
+        .expect("failed to execute process");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains('\u{f418}'));
+}
+
+#[test]
 fn test_cli_no_color_has_no_escape_codes() {
     let output = Command::new(env!("CARGO_BIN_EXE_statty"))
-        .args(["--no-color", "all"])
+        .arg("--no-color")
         .output()
         .expect("failed to execute process");
 
