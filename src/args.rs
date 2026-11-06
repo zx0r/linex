@@ -22,6 +22,8 @@ statty [WIDGET...] [OPTIONS]
 WIDGETS: cpu mem ssd git all (default: all)
 OPTIONS:
   -s, --style <ansi|tmux|plain>
+  -b, --bytes
+      --no-icons
       --no-color
       --separator <S>
   -h, --help
@@ -38,6 +40,8 @@ pub const VERSION: &[u8] = concat!("statty ", env!("CARGO_PKG_VERSION"), "\n").a
 pub fn parse<'a>(argv: &'a [std::ffi::OsString], env: &'a Env) -> Result<Cmd<'a>, &'static [u8]> {
     let mut widgets = Widgets::empty();
     let mut dialect = None;
+    let mut icons = true;
+    let mut bytes = false;
     let mut no_color = false;
     let mut sep = None;
 
@@ -51,6 +55,9 @@ pub fn parse<'a>(argv: &'a [std::ffi::OsString], env: &'a Env) -> Result<Cmd<'a>
         match arg {
             b"-h" | b"--help" => return Ok(Cmd::Help),
             b"-V" | b"--version" => return Ok(Cmd::Version),
+            b"-b" | b"--bytes" => bytes = true,
+            b"-i" | b"--icons" => icons = true,
+            b"--no-icons" => icons = false,
             b"--no-color" => no_color = true,
             b"-s" | b"--style" => {
                 let val = argv
@@ -93,9 +100,13 @@ pub fn parse<'a>(argv: &'a [std::ffi::OsString], env: &'a Env) -> Result<Cmd<'a>
         Dialect::Ansi
     });
 
+    let icons = icons && d != Dialect::Plain;
+
     Ok(Cmd::Run(crate::Config {
         widgets,
         dialect: d,
+        icons,
+        bytes,
         sep: sep.unwrap_or(" │ ".as_bytes()),
         state_dir: env.state_dir.as_deref(),
     }))
@@ -105,7 +116,7 @@ fn parse_dialect(s: &[u8]) -> Result<Dialect, &'static [u8]> {
     match s {
         b"ansi" => Ok(Dialect::Ansi),
         b"tmux" => Ok(Dialect::Tmux),
-        b"plain" => Ok(Dialect::Plain),
+        b"plain" | b"none" => Ok(Dialect::Plain),
         _ => Err(&b"invalid style"[..]),
     }
 }
@@ -126,6 +137,8 @@ mod tests {
             Cmd::Run(cfg) => {
                 assert_eq!(cfg.widgets, Widgets::ALL);
                 assert_eq!(cfg.dialect, Dialect::Ansi);
+                assert!(cfg.icons);
+                assert!(!cfg.bytes);
             }
             _ => unreachable!("expected run"),
         }
@@ -141,12 +154,16 @@ mod tests {
             OsString::from("cpu"),
             OsString::from("-s"),
             OsString::from("tmux"),
+            OsString::from("--bytes"),
+            OsString::from("--no-icons"),
         ];
         let cmd = parse(&args, &env).unwrap();
         match cmd {
             Cmd::Run(cfg) => {
                 assert_eq!(cfg.widgets.as_slice(), &[Widget::Cpu]);
                 assert_eq!(cfg.dialect, Dialect::Tmux);
+                assert!(cfg.bytes);
+                assert!(!cfg.icons);
             }
             _ => unreachable!("expected run"),
         }

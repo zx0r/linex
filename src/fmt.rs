@@ -1,4 +1,4 @@
-//! Stack buffer, color tables, itoa, and widget formatters (< 130 lines).
+//! Stack buffer, color tables, itoa, and widget formatters.
 
 pub const OUT_CAP: usize = 1024;
 
@@ -73,8 +73,10 @@ pub enum Color {
     Magenta,
 }
 
-static STYLE: [[&[u8]; 7]; 3] = [
+pub static STYLE_MATRIX: [[&[u8]; 7]; 3] = [
+    // Plain
     [b"", b"", b"", b"", b"", b"", b""],
+    // Ansi
     [
         b"\x1b[0m",
         b"\x1b[32m",
@@ -84,6 +86,7 @@ static STYLE: [[&[u8]; 7]; 3] = [
         b"\x1b[34m",
         b"\x1b[35m",
     ],
+    // Tmux
     [
         b"#[default]",
         b"#[fg=green]",
@@ -95,16 +98,43 @@ static STYLE: [[&[u8]; 7]; 3] = [
     ],
 ];
 
+pub static STYLE: [[&[u8]; 7]; 3] = STYLE_MATRIX;
+
+pub const ICON_CPU: &[u8] = "\u{f035b}".as_bytes(); // 󰍛 [0xF3, 0xB0, 0x8D, 0x9B]
+pub const ICON_MEM: &[u8] = "\u{efc5}".as_bytes(); //  [0xEE, 0xBF, 0x85]
+pub const ICON_SSD: &[u8] = "\u{f02ca}".as_bytes(); // 󰋊 [0xF3, 0xB0, 0x8B, 0x8A]
+pub const ICON_GIT: &[u8] = "\u{f418}".as_bytes(); //  [0xEF, 0x90, 0x98]
+
 pub fn style(out: &mut Out, d: Dialect, c: Color) {
-    out.push(STYLE[d as usize][c as usize]);
+    out.push(STYLE_MATRIX[d as usize][c as usize]);
 }
 
-pub const fn color_for(bp: u16) -> Color {
+pub const fn color_for_cpu(bp: u16) -> Color {
     match bp {
         0..=5000 => Color::Green,
         5001..=8000 => Color::Yellow,
         _ => Color::Red,
     }
+}
+
+pub const fn color_for_mem(bp: u16) -> Color {
+    match bp {
+        0..=7000 => Color::Green,
+        7001..=8500 => Color::Yellow,
+        _ => Color::Red,
+    }
+}
+
+pub const fn color_for_ssd(bp: u16) -> Color {
+    match bp {
+        0..=7500 => Color::Green,
+        7501..=9000 => Color::Yellow,
+        _ => Color::Red,
+    }
+}
+
+pub const fn color_for(bp: u16) -> Color {
+    color_for_cpu(bp)
 }
 
 pub fn u64(out: &mut Out, mut v: u64) {
@@ -148,21 +178,33 @@ pub fn text(out: &mut Out, d: Dialect, s: &[u8]) {
     }
 }
 
-pub fn cpu(out: &mut Out, d: Dialect, pct: Option<u16>, ok: bool) {
-    out.push(b"CPU ");
+pub fn cpu(out: &mut Out, d: Dialect, icons: bool, pct: Option<u16>, ok: bool) {
     if let Some(bp) = pct {
-        style(out, d, color_for(bp));
+        style(out, d, color_for_cpu(bp));
+        if icons {
+            out.push(ICON_CPU);
+            out.byte(b' ');
+        } else {
+            out.push(b"CPU ");
+        }
         percent(out, bp);
         style(out, d, Color::Reset);
-    } else if ok {
-        out.push(b"--");
     } else {
-        out.push(b"?");
+        if icons {
+            out.push(ICON_CPU);
+            out.byte(b' ');
+        } else {
+            out.push(b"CPU ");
+        }
+        if ok {
+            out.push(b"--");
+        } else {
+            out.push(b"?");
+        }
     }
 }
 
-pub fn mem(out: &mut Out, d: Dialect, info: Option<crate::mem::MemInfo>) {
-    out.push(b"MEM ");
+pub fn mem(out: &mut Out, d: Dialect, icons: bool, bytes: bool, info: Option<crate::mem::MemInfo>) {
     if let Some(m) = info {
         let used = m.total.saturating_sub(m.available);
         let bp = if m.total > 0 {
@@ -170,18 +212,33 @@ pub fn mem(out: &mut Out, d: Dialect, info: Option<crate::mem::MemInfo>) {
         } else {
             0
         };
-        style(out, d, color_for(bp));
-        human_bytes(out, used);
-        out.byte(b'/');
-        human_bytes(out, m.total);
+        style(out, d, color_for_mem(bp));
+        if icons {
+            out.push(ICON_MEM);
+            out.byte(b' ');
+        } else {
+            out.push(b"MEM ");
+        }
+        if bytes {
+            human_bytes(out, used);
+            out.byte(b'/');
+            human_bytes(out, m.total);
+        } else {
+            percent(out, bp);
+        }
         style(out, d, Color::Reset);
     } else {
+        if icons {
+            out.push(ICON_MEM);
+            out.byte(b' ');
+        } else {
+            out.push(b"MEM ");
+        }
         out.push(b"?");
     }
 }
 
-pub fn ssd(out: &mut Out, d: Dialect, info: Option<crate::ssd::SsdInfo>) {
-    out.push(b"SSD ");
+pub fn ssd(out: &mut Out, d: Dialect, icons: bool, bytes: bool, info: Option<crate::ssd::SsdInfo>) {
     if let Some(s) = info {
         let used = s.total.saturating_sub(s.avail);
         let bp = if s.total > 0 {
@@ -189,44 +246,97 @@ pub fn ssd(out: &mut Out, d: Dialect, info: Option<crate::ssd::SsdInfo>) {
         } else {
             0
         };
-        style(out, d, color_for(bp));
-        human_bytes(out, used);
-        out.byte(b'/');
-        human_bytes(out, s.total);
+        style(out, d, color_for_ssd(bp));
+        if icons {
+            out.push(ICON_SSD);
+            out.byte(b' ');
+        } else {
+            out.push(b"SSD ");
+        }
+        if bytes {
+            human_bytes(out, used);
+            out.byte(b'/');
+            human_bytes(out, s.total);
+        } else {
+            percent(out, bp);
+        }
         style(out, d, Color::Reset);
     } else {
+        if icons {
+            out.push(ICON_SSD);
+            out.byte(b' ');
+        } else {
+            out.push(b"SSD ");
+        }
         out.push(b"?");
     }
 }
 
-pub fn git(out: &mut Out, d: Dialect, info: &crate::git::GitInfo) {
+pub fn git(out: &mut Out, d: Dialect, icons: bool, info: &crate::git::GitInfo) {
     use crate::git::{GitOp, Worktree};
-    out.push(b"GIT ");
     let br = &info.branch[..usize::from(info.branch_len)];
     if br.is_empty() {
-        out.push(b":");
-        if let Some(oid) = &info.oid {
-            style(out, d, Color::Red);
-            for &b in &oid[..4] {
-                out.byte(b"0123456789abcdef"[usize::from(b >> 4)]);
-                out.byte(b"0123456789abcdef"[usize::from(b & 0x0F)]);
-            }
-            style(out, d, Color::Reset);
+        style(out, d, Color::Red);
+        if icons {
+            out.push(ICON_GIT);
+            out.byte(b' ');
+        } else {
+            out.push(b"GIT ");
         }
+        if let Some(oid) = &info.oid {
+            out.byte(b':');
+            let hex = b"0123456789abcdef";
+            out.byte(hex[usize::from(oid[0] >> 4)]);
+            out.byte(hex[usize::from(oid[0] & 0x0F)]);
+            out.byte(hex[usize::from(oid[1] >> 4)]);
+            out.byte(hex[usize::from(oid[1] & 0x0F)]);
+            out.byte(hex[usize::from(oid[2] >> 4)]);
+            out.byte(hex[usize::from(oid[2] & 0x0F)]);
+            out.byte(hex[usize::from(oid[3] >> 4)]);
+        }
+        style(out, d, Color::Reset);
     } else {
         style(out, d, Color::Blue);
+        if icons {
+            out.push(ICON_GIT);
+            out.byte(b' ');
+        } else {
+            out.push(b"GIT ");
+        }
         text(out, d, br);
         style(out, d, Color::Reset);
-        if let Some(oid) = &info.oid {
-            out.push(b":");
-            style(out, d, Color::Magenta);
-            for &b in &oid[..4] {
-                out.byte(b"0123456789abcdef"[usize::from(b >> 4)]);
-                out.byte(b"0123456789abcdef"[usize::from(b & 0x0F)]);
-            }
+
+        if info.worktree == Worktree::Modified {
+            style(out, d, Color::Yellow);
+            out.byte(b'*');
             style(out, d, Color::Reset);
         }
+
+        if let Some(oid) = &info.oid {
+            out.byte(b' ');
+            style(out, d, Color::Magenta);
+            out.byte(b'(');
+            let hex = b"0123456789abcdef";
+            out.byte(hex[usize::from(oid[0] >> 4)]);
+            out.byte(hex[usize::from(oid[0] & 0x0F)]);
+            out.byte(hex[usize::from(oid[1] >> 4)]);
+            out.byte(hex[usize::from(oid[1] & 0x0F)]);
+            out.byte(hex[usize::from(oid[2] >> 4)]);
+            out.byte(hex[usize::from(oid[2] & 0x0F)]);
+            out.byte(hex[usize::from(oid[3] >> 4)]);
+            out.byte(b')');
+            style(out, d, Color::Reset);
+        }
+
+        if info.worktree == Worktree::Clean {
+            style(out, d, Color::Green);
+            out.push(" ✓".as_bytes());
+            style(out, d, Color::Reset);
+        } else if info.worktree == Worktree::Unknown {
+            out.push(b" ?");
+        }
     }
+
     match info.op {
         GitOp::None => {}
         GitOp::Merge => {
@@ -255,23 +365,15 @@ pub fn git(out: &mut Out, d: Dialect, info: &crate::git::GitInfo) {
             style(out, d, Color::Reset);
         }
     }
-    match info.worktree {
-        Worktree::Clean => {
-            style(out, d, Color::Green);
-            out.push(" ✓".as_bytes());
-            style(out, d, Color::Reset);
-        }
-        Worktree::Modified => {
-            style(out, d, Color::Yellow);
-            out.push(" ✗".as_bytes());
-            style(out, d, Color::Reset);
-        }
-        Worktree::Unknown => out.push(b" ?"),
-    }
 }
 
-pub fn git_err(out: &mut Out, _d: Dialect) {
-    out.push(b"GIT ?");
+pub fn git_err(out: &mut Out, _d: Dialect, icons: bool) {
+    if icons {
+        out.push(ICON_GIT);
+        out.push(b" ?");
+    } else {
+        out.push(b"GIT ?");
+    }
 }
 
 #[cfg(test)]
@@ -309,36 +411,34 @@ mod tests {
     }
 
     #[test]
-    fn git_formatting_semantic_colors() {
+    fn git_formatting_icons_and_semantic_colors() {
         use crate::git::{GitInfo, GitOp, Worktree};
         let mut out = Out::new();
         let mut info = GitInfo {
             branch: [0; 128],
             branch_len: 4,
-            oid: Some([0x12, 0x34, 0x56, 0x78, 0, 0, 0, 0]),
+            oid: Some([0x7b, 0x84, 0x96, 0xab, 0, 0, 0, 0]),
             op: GitOp::None,
             worktree: Worktree::Clean,
         };
         info.branch[..4].copy_from_slice(b"main");
 
-        // Plain
-        git(&mut out, Dialect::Plain, &info);
-        assert_eq!(out.as_bytes(), "GIT main:12345678 ✓".as_bytes());
+        // Plain text mode
+        git(&mut out, Dialect::Plain, false, &info);
+        assert_eq!(out.as_bytes(), "GIT main (7b8496a) ✓".as_bytes());
 
-        // Ansi
+        // Ansi with icons (icon in blue scope, sha with parentheses in magenta scope)
         out.rollback(0);
-        git(&mut out, Dialect::Ansi, &info);
+        git(&mut out, Dialect::Ansi, true, &info);
         assert_eq!(
             out.as_bytes(),
-            b"GIT \x1b[34mmain\x1b[0m:\x1b[35m12345678\x1b[0m\x1b[32m \xe2\x9c\x93\x1b[0m"
+            b"\x1b[34m\xef\x90\x98 main\x1b[0m \x1b[35m(7b8496a)\x1b[0m\x1b[32m \xe2\x9c\x93\x1b[0m"
         );
 
-        // Tmux
+        // Modified worktree
+        info.worktree = Worktree::Modified;
         out.rollback(0);
-        git(&mut out, Dialect::Tmux, &info);
-        assert_eq!(
-            out.as_bytes(),
-            b"GIT #[fg=blue]main#[default]:#[fg=magenta]12345678#[default]#[fg=green] \xe2\x9c\x93#[default]"
-        );
+        git(&mut out, Dialect::Plain, true, &info);
+        assert_eq!(out.as_bytes(), " main* (7b8496a)".as_bytes());
     }
 }

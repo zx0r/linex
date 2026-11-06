@@ -1,5 +1,5 @@
 # Justfile - Systems Engineering Command Orchestrator
-# Architecture: Minimalist Unix Shell History Engine
+# Architecture: Zero-Dependency Telemetry Widget Engine (statty)
 
 set dotenv-load := false
 set export := false
@@ -46,13 +46,6 @@ bench *args:
 bench-scale:
     cargo bench --bench bench_scale
 
-# Run comparative stress benchmark: xstory vs Atuin (100k/500k/1M, zero hardcode)
-bench-comparative:
-    cargo bench --bench bench_comparative
-
-# Run comparative system benchmark against Atuin (size, SLOC, RSS, hardware counters)
-bench-system:
-    python3 scripts/benchmark.py
 
 # Run source-based LLVM coverage suite
 cov:

@@ -63,6 +63,8 @@ impl Widgets {
 pub struct Config<'a> {
     pub widgets: Widgets,
     pub dialect: fmt::Dialect,
+    pub icons: bool,
+    pub bytes: bool,
     pub sep: &'a [u8],
     pub state_dir: Option<&'a OsStr>,
 }
@@ -105,27 +107,27 @@ pub fn render(cfg: &Config<'_>, out: &mut fmt::Out) -> bool {
         healthy &= match w {
             Widget::Cpu => {
                 let (p, ok) = cpu_widget(cfg);
-                fmt::cpu(out, cfg.dialect, p, ok);
+                fmt::cpu(out, cfg.dialect, cfg.icons, p, ok);
                 ok
             }
             Widget::Mem => {
                 let m = mem::read();
-                fmt::mem(out, cfg.dialect, m);
+                fmt::mem(out, cfg.dialect, cfg.icons, cfg.bytes, m);
                 m.is_some()
             }
             Widget::Ssd => {
                 let s = ssd::read();
-                fmt::ssd(out, cfg.dialect, s);
+                fmt::ssd(out, cfg.dialect, cfg.icons, cfg.bytes, s);
                 s.is_some()
             }
             Widget::Git => match git::read() {
                 Ok(Some(g)) => {
-                    fmt::git(out, cfg.dialect, &g);
+                    fmt::git(out, cfg.dialect, cfg.icons, &g);
                     true
                 }
                 Ok(None) => true,
                 Err(git::GitError) => {
-                    fmt::git_err(out, cfg.dialect);
+                    fmt::git_err(out, cfg.dialect, cfg.icons);
                     false
                 }
             },
