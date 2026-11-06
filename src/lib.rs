@@ -1,4 +1,4 @@
-//! `statty` — zero-dependency, zero-allocation telemetry widgets (< 90 lines).
+//! `linex` — zero-dependency, zero-allocation telemetry widgets (< 90 lines).
 
 pub mod args;
 pub mod cpu;

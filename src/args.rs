@@ -16,8 +16,8 @@ pub enum Cmd<'a> {
     Version,
 }
 
-pub const HELP: &[u8] = b"statty [WIDGET...] [OPTIONS]\n\nWIDGETS: cpu mem ssd git\nOPTIONS:\n  -s, --style <ansi|tmux|plain>\n  -G, --git-status\n  -b, --bytes\n      --no-icons\n      --no-color\n      --separator <S>\n  -h, --help\n  -V, --version\n";
-pub const VERSION: &[u8] = concat!("statty ", env!("CARGO_PKG_VERSION"), "\n").as_bytes();
+pub const HELP: &[u8] = b"linex [WIDGET...] [OPTIONS]\n\nWIDGETS: cpu mem ssd git\nOPTIONS:\n  -s, --style <ansi|tmux|plain>\n  -G, --git-status\n  -b, --bytes\n      --no-icons\n      --no-color\n      --separator <S>\n  -h, --help\n  -V, --version\n";
+pub const VERSION: &[u8] = concat!("linex ", env!("CARGO_PKG_VERSION"), "\n").as_bytes();
 
 /// Parse CLI arguments.
 ///
@@ -60,11 +60,11 @@ pub fn parse<'a>(argv: &'a [std::ffi::OsString], env: &'a Env) -> Result<Cmd<'a>
         }
     }
     if widgets.is_empty() { widgets = Widgets::ALL; }
-    let d = dialect.unwrap_or(if no_color || env.no_color { Dialect::Plain } else { Dialect::Ansi });
+    let d = dialect.unwrap_or(if no_color || env.no_color { Dialect::Plain } else { Dialect::Tmux });
     let icons = icons && d != Dialect::Plain;
     Ok(Cmd::Run(crate::Config {
         widgets, dialect: d, icons, bytes, git_detail,
-        sep: sep.unwrap_or(" │ ".as_bytes()),
+        sep: sep.unwrap_or(b" "),
         state_dir: env.state_dir.as_deref(),
     }))
 }
@@ -88,7 +88,7 @@ mod tests {
     fn parse_tests() {
         let env = Env { no_color: false, state_dir: None };
         let Cmd::Run(c1) = parse(&[], &env).unwrap() else { unreachable!() };
-        assert_eq!((c1.widgets, c1.dialect, c1.icons, c1.bytes, c1.git_detail), (Widgets::ALL, Dialect::Ansi, true, false, false));
+        assert_eq!((c1.widgets, c1.dialect, c1.icons, c1.bytes, c1.git_detail), (Widgets::ALL, Dialect::Tmux, true, false, false));
 
         let args = [OsString::from("cpu"), OsString::from("-s"), OsString::from("tmux"), OsString::from("-G"), OsString::from("--bytes"), OsString::from("--no-icons")];
         let Cmd::Run(c2) = parse(&args, &env).unwrap() else { unreachable!() };

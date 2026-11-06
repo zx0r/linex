@@ -286,38 +286,38 @@ jobs:
           intel_mac = find_asset(all_artifacts, 'x86_64-apple-darwin')
           linux_x86 = find_asset(all_artifacts, 'x86_64-unknown-linux-gnu')
 
-          formula_path = "target/distrib/statty.rb"
+          formula_path = "target/distrib/linex.rb"
 
           formula = <<~RUBY
-            class Statty < Formula
+            class Linex < Formula
               desc "Zero-dependency, zero-allocation telemetry widgets"
-              homepage "https://github.com/zx0r/statty"
+              homepage "https://github.com/zx0r/linex"
               license any_of: ["Apache-2.0", "MIT"]
 
               on_macos do
                 on_arm do
-                  url "https://github.com/zx0r/statty/releases/download/v#{version}/#{arm_mac['name']}"
+                  url "https://github.com/zx0r/linex/releases/download/v#{version}/#{arm_mac['name']}"
                   sha256 "#{arm_mac['actual_sha256']}"
                 end
                 on_intel do
-                  url "https://github.com/zx0r/statty/releases/download/v#{version}/#{intel_mac['name']}"
+                  url "https://github.com/zx0r/linex/releases/download/v#{version}/#{intel_mac['name']}"
                   sha256 "#{intel_mac['actual_sha256']}"
                 end
               end
 
               on_linux do
                 on_intel do
-                  url "https://github.com/zx0r/statty/releases/download/v#{version}/#{linux_x86['name']}"
+                  url "https://github.com/zx0r/linex/releases/download/v#{version}/#{linux_x86['name']}"
                   sha256 "#{linux_x86['actual_sha256']}"
                 end
               end
 
               def install
-                bin.install "statty"
+                bin.install "linex"
               end
 
               test do
-                assert_match "statty #{version}", shell_output("\#{bin}/statty --version")
+                assert_match "linex #{version}", shell_output("\#{bin}/linex --version")
               end
             end
           RUBY
@@ -504,9 +504,9 @@ jobs:
     #    Add rule: `v*` (Allows deployment only from release tags).
     #
     # --- PHASE 3: crates.io Trusted Publisher --------------------------------
-    # 1. Go to: https://crates.io/crates/statty/settings/new-trusted-publisher
+    # 1. Go to: https://crates.io/crates/linex/settings/new-trusted-publisher
     # 2. Select "GitHub Actions".
-    # 3. Repository: `zx0r/statty`
+    # 3. Repository: `zx0r/linex`
     # 4. Workflow name: `release.yml`
     # 5. Environment name: `crates.io` (Must match Phase 2).
     #

@@ -1,6 +1,6 @@
 ---
 name: Question
-about: Ask a question regarding statty architecture, telemetry widgets, or configuration.
+about: Ask a question regarding linex architecture, telemetry widgets, or configuration.
 title: "[QUESTION] "
 labels: ["question"]
 assignees: ''
@@ -14,4 +14,4 @@ assignees: ''
 
 ---
 > [!TIP]
-> For general discussions or community Q&A, you can also join the [GitHub Discussions](https://github.com/zx0r/statty/discussions).
+> For general discussions or community Q&A, you can also join the [GitHub Discussions](https://github.com/zx0r/linex/discussions).

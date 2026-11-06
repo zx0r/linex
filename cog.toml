@@ -18,7 +18,7 @@ post_bump_hooks = [
     "git push origin {{version_tag}}",
 ]
 
-# Enforced commit scopes for statty architecture
+# Enforced commit scopes for linex architecture
 scopes = [
     "args",
     "bench",
@@ -61,4 +61,4 @@ path = "CHANGELOG.md"
 template = "remote"
 remote = "github.com"
 owner = "zx0r"
-repository = "statty"
+repository = "linex"

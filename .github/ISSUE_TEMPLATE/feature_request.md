@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Propose a functional enhancement or architectural feature for statty.
+about: Propose a functional enhancement or architectural feature for linex.
 title: "[FEATURE] "
 labels: ["enhancement"]
 assignees: ''
@@ -12,7 +12,7 @@ assignees: ''
 ## Proposed Solution & CLI UX
 <!-- Describe how the CLI syntax, widget, or output behavior should look. -->
 ```console
-$ statty ...
+$ linex ...
 ```
 
 ## Architectural Considerations

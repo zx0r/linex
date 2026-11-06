@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - 2026-11-06
 
 ### Added
-- Initial release of **statty**: zero-dependency, zero-allocation telemetry engine.
+- Initial release of **linex**: zero-dependency, zero-allocation telemetry engine.
 
-[0.1.0]: https://github.com/zx0r/statty/releases/tag/v0.1.0
+[0.1.0]: https://github.com/zx0r/linex/releases/tag/v0.1.0
 

@@ -1,12 +1,12 @@
 [package]
-name = "statty"
+name = "linex"
 version = "0.1.0"
 edition = "2024"
 resolver = "3"
 rust-version = "1.96.0"
-repository = "https://github.com/zx0r/statty"
+repository = "https://github.com/zx0r/linex"
 description = "Fast, zero-overhead terminal state widgets for tmux and status lines"
-homepage = "https://github.com/zx0r/statty#readme"
+homepage = "https://github.com/zx0r/linex#readme"
 authors = ["zx0r <admin@zx0r.io>"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"

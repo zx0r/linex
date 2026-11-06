@@ -195,7 +195,7 @@ pub fn mtime_at(dir: &Fd, path: &CStr) -> Option<i64> {
 pub fn open_state(dir: &OsStr) -> Option<Fd> {
     // SAFETY: querying user id.
     let uid = unsafe { c_getuid() };
-    let path = std::path::Path::new(dir).join(format!("statty-{uid}.cpu\0"));
+    let path = std::path::Path::new(dir).join(format!("linex-{uid}.cpu\0"));
     let cpath = CStr::from_bytes_with_nul(path.as_os_str().as_encoded_bytes()).ok()?;
     let flags = O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC;
     // SAFETY: cpath is valid null-terminated C string, mode 0600 is valid.

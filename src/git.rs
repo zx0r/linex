@@ -127,7 +127,7 @@ pub fn render(out: &mut Out, d: fmt::Dialect, icons: bool, _detail: bool) -> boo
 
     let mut hasher = DefaultHasher::new();
     cwd[..r_len + 5].hash(&mut hasher);
-    let cache_path = std::env::temp_dir().join(format!("statty_git_{:x}.cache", hasher.finish()));
+    let cache_path = std::env::temp_dir().join(format!("linex_git_{:x}.cache", hasher.finish()));
     let max_mtime = idx_m.max(head_m).max(sys::mtime_at(&git_fd, c"FETCH_HEAD").unwrap_or(0));
     let c_mtime = std::fs::metadata(&cache_path).ok().and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |x| i64::try_from(x.as_secs()).unwrap_or(0));
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |x| i64::try_from(x.as_secs()).unwrap_or(0));

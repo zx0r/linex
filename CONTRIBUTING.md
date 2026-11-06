@@ -1,6 +1,6 @@
-# Contributing to statty
+# Contributing to linex
 
-Thank you for considering contributing to **statty**!
+Thank you for considering contributing to **linex**!
 
 ## Guidelines & Principles
 

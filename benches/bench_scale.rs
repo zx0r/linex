@@ -1,4 +1,4 @@
-//! High-density architectural benchmark for statty widgets and formatting engine.
+//! High-density architectural benchmark for linex widgets and formatting engine.
 
 #![allow(
     clippy::print_stdout,
@@ -31,37 +31,37 @@ fn main() {
     if std::env::args().any(|arg| arg == "--list") {
         return;
     }
-    println!("=== statty architectural benchmark suite ===");
+    println!("=== linex architectural benchmark suite ===");
 
     // 1. Benchmark Out stack buffer operations
     bench("fmt::Out push & itoa", 100_000, || {
-        let mut out = statty::fmt::Out::new();
+        let mut out = linex::fmt::Out::new();
         out.push(b"prefix: ");
-        statty::fmt::u64(&mut out, 123_456);
+        linex::fmt::u64(&mut out, 123_456);
         out.byte(b'%');
         black_box(out.as_bytes());
     });
 
     // 2. Benchmark format dialect styling
     bench("fmt::style (tmux matrix)", 100_000, || {
-        let mut out = statty::fmt::Out::new();
-        statty::fmt::style(
+        let mut out = linex::fmt::Out::new();
+        linex::fmt::style(
             &mut out,
-            statty::fmt::Dialect::Tmux,
-            statty::fmt::Color::Green,
+            linex::fmt::Dialect::Tmux,
+            linex::fmt::Color::Green,
         );
         out.push(b"test");
-        statty::fmt::style(
+        linex::fmt::style(
             &mut out,
-            statty::fmt::Dialect::Tmux,
-            statty::fmt::Color::Reset,
+            linex::fmt::Dialect::Tmux,
+            linex::fmt::Color::Reset,
         );
         black_box(out.as_bytes());
     });
 
     // 3. Benchmark CLI argument parsing
     bench("args::parse", 50_000, || {
-        let env = statty::args::Env {
+        let env = linex::args::Env {
             no_color: false,
             state_dir: None,
         };
@@ -71,15 +71,15 @@ fn main() {
             std::ffi::OsString::from("-s"),
             std::ffi::OsString::from("tmux"),
         ];
-        let res = statty::args::parse(&args, &env);
+        let res = linex::args::parse(&args, &env);
         let _ = black_box(res);
     });
 
     // 4. Benchmark widget rendering
     let temp = std::env::temp_dir();
-    let cfg = statty::Config {
-        widgets: statty::Widgets::ALL,
-        dialect: statty::fmt::Dialect::Plain,
+    let cfg = linex::Config {
+        widgets: linex::Widgets::ALL,
+        dialect: linex::fmt::Dialect::Plain,
         icons: false,
         bytes: false,
         git_detail: false,
@@ -87,8 +87,8 @@ fn main() {
         state_dir: Some(temp.as_os_str()),
     };
     bench("render (all widgets)", 5_000, || {
-        let mut out = statty::fmt::Out::new();
-        let _ = statty::render(&cfg, &mut out);
+        let mut out = linex::fmt::Out::new();
+        let _ = linex::render(&cfg, &mut out);
         black_box(out.as_bytes());
     });
 }

@@ -47,7 +47,7 @@ unix-archive = ".tar.gz"
 
 # Homebrew Tap Repository
 tap = "zx0r/homebrew-tap"
-formula = "statty"
+formula = "linex"
 
 # Supply Chain Provenance (SLSA Level 3 via GitHub Attestations)
 github-attestations = true

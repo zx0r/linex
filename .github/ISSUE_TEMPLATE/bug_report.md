@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a reproducible defect or unexpected behavior in statty.
+about: Report a reproducible defect or unexpected behavior in linex.
 title: "[BUG] "
 labels: ["bug"]
 assignees: ''
@@ -10,18 +10,18 @@ assignees: ''
 <!-- A clear and concise description of the bug. -->
 
 ## Reproduction Steps
-1. Execute command: `statty <args>`
+1. Execute command: `linex <args>`
 2. Observe error: `...`
 
 ## Expected Behavior
-<!-- What you expected statty to do. -->
+<!-- What you expected linex to do. -->
 
 ## Diagnostic Environment
 Please run the following commands and paste the exact output:
 
 ```console
-$ statty --version
-$ statty -s ansi
+$ linex --version
+$ linex -s ansi
 $ uname -a
 $ tmux -V
 ```
