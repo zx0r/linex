@@ -21,6 +21,7 @@ include = [
   "benches/**/*.rs",
   "Cargo.toml",
   "README.md",
+  "CHANGELOG.md",
   "LICENSE*",
 ]
 
