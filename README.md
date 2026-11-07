@@ -37,10 +37,12 @@ cd linex && just release
 ### Integration
 
 ```bash
+# TOP Bar pane-border-format
+set -gF @mod_git "linex git"
 
-# Tmux
-set -g status-left '#(linex git)'
-set -g status-right '#(linex cpu mem ssd)'
+# Bottom Bar
+set -gF @mod_hw "linex cpu mem ssd uptime"
+set -g @mod_right "#(#{E:@mod_hw}) #{E:@zoom}"
 ```
 
 ---
