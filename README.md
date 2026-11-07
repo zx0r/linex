@@ -11,9 +11,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/user-attachments/assets/808dbcbd-fad3-43f3-a6c9-788406c55331">
-    <img src="assets/gif/xstory-preview.gif" alt="xstory demo — sub-millisecond shell history fuzzy search and preview" style="border-radius: 8px; max-width: 100%;" />
-  </a>
+  <img src="assets/images/linex.png" alt="linex telemetry in tmux — zero-allocation status widgets" style="border-radius: 8px; max-width: 100%;" />
 </p>
 
 ---

@@ -57,6 +57,17 @@ pub struct StatVfs {
     pub f_namemax: usize, _f_spare: [CInt; 6],
 }
 
+#[cfg(target_os = "linux")]
+pub const CLOCK_BOOTTIME: CInt = 7;
+
+#[cfg(target_os = "linux")]
+#[repr(C)]
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Timespec {
+    pub tv_sec: i64,
+    pub tv_nsec: i64,
+}
+
 #[repr(C, align(8))]
 #[derive(Debug)]
 pub struct StatStub {
@@ -89,6 +100,7 @@ unsafe extern "C" {
     #[cfg(target_os = "macos")] pub fn mach_port_deallocate(task: u32, name: u32) -> CInt;
 
     #[cfg(target_os = "linux")] pub fn statvfs(path: *const CChar, buf: *mut StatVfs) -> CInt;
+    #[cfg(target_os = "linux")] pub fn clock_gettime(clk_id: CInt, tp: *mut Timespec) -> CInt;
 }
 
 #[derive(Debug)]

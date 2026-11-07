@@ -51,11 +51,21 @@ pub fn uptime_secs() -> Option<u64> {
 
 #[cfg(target_os = "linux")]
 pub fn uptime_secs() -> Option<u64> {
-    use crate::sys::{self, Fd};
+    use crate::sys;
 
-    let fd = Fd::open(c"/proc/uptime", sys::O_RDONLY)?;
+    // Fast-path: clock_gettime(CLOCK_BOOTTIME) via Linux vDSO (zero-syscall, ~15ns, container-safe).
+    let mut ts = sys::Timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: ts is valid stack-allocated Timespec struct.
+    if unsafe { sys::clock_gettime(sys::CLOCK_BOOTTIME, &raw mut ts) } == 0 && ts.tv_sec >= 0 {
+        return u64::try_from(ts.tv_sec).ok();
+    }
+
+    // Fallback: parse /proc/uptime if vDSO is unavailable.
     let mut buf = [0u8; 64];
-    let b = sys::read_buf(&fd, &mut buf)?;
+    let b = sys::read_file(c"/proc/uptime", &mut buf)?;
 
     let mut sec = 0u64;
     for &c in b {
