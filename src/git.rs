@@ -96,15 +96,30 @@ fn parse_cache(buf: &[u8]) -> (Metrics, u16) {
     (m, stashed)
 }
 
+const C_GREEN: u8 = 84;
+const C_PEACH: u8 = 215;
+const C_SKY: u8 = 87;
+const C_RED: u8 = 203;
+const C_SAPPHIRE: u8 = 75;
+const C_MAUVE: u8 = 135;
+
 #[rustfmt::skip]
 fn render_counters(out: &mut Out, d: fmt::Dialect, m: &Metrics, stashed: u16) {
-    let list: [(u16, &[u8], fmt::Color); 5] = [
-        (m.staged, "\u{25cf}".as_bytes(), fmt::Color::Green), (m.unstaged, "\u{271a}".as_bytes(), fmt::Color::Yellow),
-        (m.untracked, b"?", fmt::Color::Blue), (m.conflicted, "\u{2716}".as_bytes(), fmt::Color::Red),
-        (stashed, "\u{2691}".as_bytes(), fmt::Color::Pink),
+    let list: [(u16, &[u8], u8); 5] = [
+        (m.staged, "\u{271a}".as_bytes(), C_GREEN),
+        (m.unstaged, b"!", C_PEACH),
+        (m.untracked, b"?", C_SKY),
+        (m.conflicted, "\u{2716}".as_bytes(), C_RED),
+        (stashed, "\u{2691}".as_bytes(), C_SKY),
     ];
     for (v, sym, col) in list {
-        if v > 0 { out.byte(b' '); fmt::style(out, d, col); out.push(sym); fmt::u64(out, u64::from(v)); fmt::style(out, d, fmt::Color::Reset); }
+        if v > 0 {
+            out.byte(b' ');
+            fmt::color(out, d, col);
+            out.push(sym);
+            fmt::u64(out, u64::from(v));
+            fmt::reset(out, d);
+        }
     }
 }
 
@@ -162,20 +177,24 @@ pub fn render_at(out: &mut Out, d: fmt::Dialect, icons: bool, _detail: bool, pat
         for &c in b { if c == b'\n' { stashed = stashed.saturating_add(1); } }
     }
 
-    fmt::style(out, d, fmt::Color::Blue);
+    fmt::color(out, d, C_SAPPHIRE);
     fmt::bold(out, d);
     if icons { out.push(ICON_GIT); out.byte(b' '); } else { out.push(b"GIT "); }
-    if let Some(name) = line.strip_prefix(b"ref: refs/heads/") { fmt::text(out, d, name); } else { fmt::style(out, d, fmt::Color::Red); out.push(b"detached"); }
-    fmt::style(out, d, fmt::Color::Reset);
+    if let Some(name) = line.strip_prefix(b"ref: refs/heads/") { fmt::text(out, d, name); } else { fmt::color(out, d, C_RED); out.push(b"detached"); }
+    fmt::reset(out, d);
 
-    if is_dirty || m.unstaged > 0 { fmt::style(out, d, fmt::Color::Yellow); out.byte(b'*'); fmt::style(out, d, fmt::Color::Reset); }
-    if !op.is_empty() { out.byte(b' '); fmt::style(out, d, fmt::Color::Yellow); out.push(op); fmt::style(out, d, fmt::Color::Reset); }
+    if is_dirty || m.unstaged > 0 { fmt::color(out, d, C_PEACH); out.byte(b'*'); fmt::reset(out, d); }
+    if !op.is_empty() { out.byte(b' '); fmt::color(out, d, C_PEACH); out.push(op); fmt::reset(out, d); }
 
-    if has_sha { out.byte(b' '); fmt::style(out, d, fmt::Color::Magenta); out.byte(b'('); out.push(&sha); out.byte(b')'); fmt::style(out, d, fmt::Color::Reset); }
-    if m.ahead > 0 { out.byte(b' '); fmt::style(out, d, fmt::Color::Cyan); out.push("⇡".as_bytes()); fmt::u64(out, u64::from(m.ahead)); fmt::style(out, d, fmt::Color::Reset); }
-    if m.behind > 0 { out.byte(b' '); fmt::style(out, d, fmt::Color::Yellow); out.push("⇣".as_bytes()); fmt::u64(out, u64::from(m.behind)); fmt::style(out, d, fmt::Color::Reset); }
+    if has_sha { out.byte(b' '); fmt::color(out, d, C_MAUVE); out.byte(b'('); out.push(&sha); out.byte(b')'); fmt::reset(out, d); }
+    if m.ahead > 0 && m.behind > 0 {
+        out.byte(b' '); fmt::color(out, d, C_MAUVE); out.push("⇕".as_bytes()); fmt::u64(out, u64::from(m.ahead + m.behind)); fmt::reset(out, d);
+    } else {
+        if m.ahead > 0 { out.byte(b' '); fmt::color(out, d, C_SAPPHIRE); out.push("⇡".as_bytes()); fmt::u64(out, u64::from(m.ahead)); fmt::reset(out, d); }
+        if m.behind > 0 { out.byte(b' '); fmt::color(out, d, C_SAPPHIRE); out.push("⇣".as_bytes()); fmt::u64(out, u64::from(m.behind)); fmt::reset(out, d); }
+    }
     render_counters(out, d, &m, stashed);
-    if !is_dirty && m.staged == 0 && m.unstaged == 0 && m.untracked == 0 && m.conflicted == 0 { fmt::style(out, d, fmt::Color::Green); out.push(" ✓".as_bytes()); fmt::style(out, d, fmt::Color::Reset); }
+    if !is_dirty && m.staged == 0 && m.unstaged == 0 && m.untracked == 0 && m.conflicted == 0 { fmt::color(out, d, C_GREEN); out.push(" ✓".as_bytes()); fmt::reset(out, d); }
     out.byte(b' ');
     true
 }

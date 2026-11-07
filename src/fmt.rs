@@ -52,6 +52,32 @@ pub fn style(out: &mut Out, d: Dialect, c: Color) {
     out.push(STYLE_MATRIX[d as usize][c as usize]);
 }
 
+#[inline(always)]
+pub fn color(out: &mut Out, d: Dialect, idx: u8) {
+    match d {
+        Dialect::Plain => {}
+        Dialect::Ansi => {
+            out.push(b"\x1b[38;5;");
+            u64(out, u64::from(idx));
+            out.byte(b'm');
+        }
+        Dialect::Tmux => {
+            out.push(b"#[fg=colour");
+            u64(out, u64::from(idx));
+            out.byte(b']');
+        }
+    }
+}
+
+#[inline(always)]
+pub fn reset(out: &mut Out, d: Dialect) {
+    match d {
+        Dialect::Plain => {}
+        Dialect::Ansi => out.push(b"\x1b[0m"),
+        Dialect::Tmux => out.push(b"#[default]"),
+    }
+}
+
 pub fn bold(out: &mut Out, d: Dialect) {
     match d {
         Dialect::Plain => {}
