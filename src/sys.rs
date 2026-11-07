@@ -22,6 +22,10 @@ pub const S_IFDIR: u32 = 0o040_000;
 pub const S_IFREG: u32 = 0o100_000;
 
 #[cfg(target_os = "macos")]
+pub const CTL_KERN: CInt = 1;
+#[cfg(target_os = "macos")]
+pub const KERN_BOOTTIME: CInt = 21;
+#[cfg(target_os = "macos")]
 pub const CTL_HW: CInt = 6;
 #[cfg(target_os = "macos")]
 pub const HW_MEMSIZE: CInt = 24;
@@ -72,9 +76,11 @@ unsafe extern "C" {
     #[link_name = "faccessat"] fn c_faccessat(d: CInt, p: *const CChar, m: CInt, f: CInt) -> CInt;
     #[link_name = "getcwd"] fn c_getcwd(b: *mut CChar, s: CSize) -> *mut CChar;
     #[link_name = "getuid"] fn c_getuid() -> u32;
+    #[link_name = "time"] pub fn c_time(t: *mut i64) -> i64;
     pub fn getpagesize() -> CInt;
 
     #[cfg(target_os = "macos")] pub fn statfs(path: *const CChar, buf: *mut StatFs) -> CInt;
+    #[cfg(target_os = "macos")] #[link_name = "sysctl"] pub fn c_sysctl(n: *const CInt, nl: u32, op: *mut core::ffi::c_void, ol: *mut CSize, np: *mut core::ffi::c_void, nl2: CSize) -> CInt;
     #[cfg(target_os = "macos")] pub fn sysctl(n: *const CInt, nl: u32, op: *mut core::ffi::c_void, ol: *mut CSize, np: *mut core::ffi::c_void, nl2: CSize) -> CInt;
     #[cfg(target_os = "macos")] pub fn mach_host_self() -> u32;
     #[cfg(target_os = "macos")] pub fn mach_task_self() -> u32;

@@ -46,9 +46,18 @@ pub static STYLE_MATRIX: [[&[u8]; 8]; 3] = [
 pub const ICON_CPU: &[u8] = "\u{f035b}".as_bytes();
 pub const ICON_MEM: &[u8] = "\u{efc5}".as_bytes();
 pub const ICON_SSD: &[u8] = "\u{f02ca}".as_bytes();
+pub const ICON_UPTIME: &[u8] = "\u{f176}".as_bytes();
 
 pub fn style(out: &mut Out, d: Dialect, c: Color) {
     out.push(STYLE_MATRIX[d as usize][c as usize]);
+}
+
+pub fn bold(out: &mut Out, d: Dialect) {
+    match d {
+        Dialect::Plain => {}
+        Dialect::Ansi => out.push(b"\x1b[1m"),
+        Dialect::Tmux => out.push(b"#[bold]"),
+    }
 }
 
 #[rustfmt::skip]
@@ -130,6 +139,38 @@ pub fn ssd(out: &mut Out, d: Dialect, icons: bool, bytes: bool, used: u64, total
 #[rustfmt::skip]
 pub fn ssd_err(out: &mut Out, icons: bool) {
     if icons { out.push(ICON_SSD); out.byte(b' '); } else { out.push(b"SSD "); }
+    out.push(b"?");
+}
+
+#[rustfmt::skip]
+pub fn uptime(out: &mut Out, d: Dialect, icons: bool, secs: u64) {
+    style(out, d, Color::Reset);
+    if icons { out.push(ICON_UPTIME); } else { out.push(b"UP "); }
+    if secs >= 365 * 86400 {
+        u64(out, secs / (365 * 86400));
+        out.byte(b'y');
+    } else if secs >= 30 * 86400 {
+        u64(out, secs / (30 * 86400));
+        out.byte(b'm');
+    } else if secs >= 7 * 86400 {
+        u64(out, secs / (7 * 86400));
+        out.byte(b'w');
+    } else if secs >= 86400 {
+        u64(out, secs / 86400);
+        out.byte(b'd');
+    } else if secs >= 3600 {
+        u64(out, secs / 3600);
+        out.byte(b'h');
+    } else {
+        u64(out, (secs / 60).max(1));
+        out.byte(b'm');
+    }
+    style(out, d, Color::Reset);
+}
+
+#[rustfmt::skip]
+pub fn uptime_err(out: &mut Out, icons: bool) {
+    if icons { out.push(ICON_UPTIME); } else { out.push(b"UP "); }
     out.push(b"?");
 }
 

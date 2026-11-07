@@ -286,38 +286,53 @@ jobs:
           intel_mac = find_asset(all_artifacts, 'x86_64-apple-darwin')
           linux_x86 = find_asset(all_artifacts, 'x86_64-unknown-linux-gnu')
 
-          formula_path = "target/distrib/linex.rb"
+          cargo_toml = File.read('Cargo.toml')
+          app_name   = cargo_toml[/name\s*=\s*"([^"]+)"/, 1] || "linex"
+          class_name = app_name.split(/[-_]/).map(&:capitalize).join
+          desc       = cargo_toml[/description\s*=\s*"([^"]+)"/, 1] || "Fast, zero-overhead terminal state widgets for tmux and status lines"
+          homepage   = (cargo_toml[/homepage\s*=\s*"([^"]+)"/, 1] || "https://github.com/zx0r/#{app_name}").sub(/#.*$/, '')
+          repo_url   = cargo_toml[/repository\s*=\s*"([^"]+)"/, 1] || "https://github.com/zx0r/#{app_name}"
+
+          raw_lic    = cargo_toml[/license\s*=\s*"([^"]+)"/, 1] || "MIT OR Apache-2.0"
+          lic_stmt   = if raw_lic.include?(" OR ")
+                         licenses = raw_lic.split(" OR ").map { |l| "\"#{l.strip}\"" }.sort.join(", ")
+                         "license any_of: [#{licenses}]"
+                       else
+                         "license \"#{raw_lic}\""
+                       end
+
+          formula_path = "target/distrib/#{app_name}.rb"
 
           formula = <<~RUBY
-            class Linex < Formula
-              desc "Zero-dependency, zero-allocation telemetry widgets"
-              homepage "https://github.com/zx0r/linex"
-              license any_of: ["Apache-2.0", "MIT"]
+            class #{class_name} < Formula
+              desc "#{desc}"
+              homepage "#{homepage}"
+              #{lic_stmt}
 
               on_macos do
                 on_arm do
-                  url "https://github.com/zx0r/linex/releases/download/v#{version}/#{arm_mac['name']}"
+                  url "#{repo_url}/releases/download/v#{version}/#{arm_mac['name']}"
                   sha256 "#{arm_mac['actual_sha256']}"
                 end
                 on_intel do
-                  url "https://github.com/zx0r/linex/releases/download/v#{version}/#{intel_mac['name']}"
+                  url "#{repo_url}/releases/download/v#{version}/#{intel_mac['name']}"
                   sha256 "#{intel_mac['actual_sha256']}"
                 end
               end
 
               on_linux do
                 on_intel do
-                  url "https://github.com/zx0r/linex/releases/download/v#{version}/#{linux_x86['name']}"
+                  url "#{repo_url}/releases/download/v#{version}/#{linux_x86['name']}"
                   sha256 "#{linux_x86['actual_sha256']}"
                 end
               end
 
               def install
-                bin.install "linex"
+                bin.install "#{app_name}"
               end
 
               test do
-                assert_match "linex #{version}", shell_output("\#{bin}/linex --version")
+                assert_match "#{app_name} #{version}", shell_output("\#{bin}/#{app_name} --version")
               end
             end
           RUBY

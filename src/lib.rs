@@ -8,25 +8,27 @@ pub mod mem;
 pub mod ssd;
 pub mod state;
 pub mod sys;
+pub mod uptime;
 
 use std::ffi::OsStr;
+use std::path::Path;
 
 #[rustfmt::skip]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(u8)]
-pub enum Widget { Cpu, Mem, Ssd, Git }
+pub enum Widget { Cpu, Mem, Ssd, Git, Uptime }
 
 #[rustfmt::skip]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct Widgets { list: [Widget; 4], len: u8 }
+pub struct Widgets { list: [Widget; 5], len: u8 }
 
 #[rustfmt::skip]
 impl Widgets {
-    pub const ALL: Self = Self { list: [Widget::Cpu, Widget::Mem, Widget::Ssd, Widget::Git], len: 4 };
-    pub const fn empty() -> Self { Self { list: [Widget::Cpu; 4], len: 0 } }
+    pub const ALL: Self = Self { list: [Widget::Cpu, Widget::Mem, Widget::Ssd, Widget::Git, Widget::Uptime], len: 5 };
+    pub const fn empty() -> Self { Self { list: [Widget::Cpu; 5], len: 0 } }
     pub fn push(&mut self, w: Widget) {
         for &item in &self.list[..self.len as usize] { if item == w { return; } }
-        if (self.len as usize) < 4 { self.list[self.len as usize] = w; self.len += 1; }
+        if (self.len as usize) < 5 { self.list[self.len as usize] = w; self.len += 1; }
     }
     pub const fn is_empty(&self) -> bool { self.len == 0 }
     pub fn as_slice(&self) -> &[Widget] { &self.list[..self.len as usize] }
@@ -36,7 +38,7 @@ impl Widgets {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Config<'a> {
     pub widgets: Widgets, pub dialect: fmt::Dialect, pub icons: bool, pub bytes: bool,
-    pub git_detail: bool, pub sep: &'a [u8], pub state_dir: Option<&'a OsStr>,
+    pub git_detail: bool, pub sep: &'a [u8], pub path: Option<&'a Path>, pub state_dir: Option<&'a OsStr>,
 }
 
 pub fn parse_u64(s: &[u8]) -> Option<u64> {
@@ -73,7 +75,16 @@ pub fn render(cfg: &Config<'_>, out: &mut fmt::Out) -> bool {
             Widget::Cpu => cpu_widget(cfg, out),
             Widget::Mem => mem::render(out, cfg.dialect, cfg.icons, cfg.bytes),
             Widget::Ssd => ssd::render(out, cfg.dialect, cfg.icons, cfg.bytes),
-            Widget::Git => git::render(out, cfg.dialect, cfg.icons, cfg.git_detail),
+            Widget::Git => git::render_at(out, cfg.dialect, cfg.icons, cfg.git_detail, cfg.path),
+            Widget::Uptime => {
+                if let Some(secs) = uptime::uptime_secs() {
+                    fmt::uptime(out, cfg.dialect, cfg.icons, secs);
+                    true
+                } else {
+                    fmt::uptime_err(out, cfg.icons);
+                    false
+                }
+            }
         };
         if out.full() { out.rollback(mark); break; }
         if out.mark() == body { out.rollback(mark); }

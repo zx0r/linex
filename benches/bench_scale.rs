@@ -84,6 +84,7 @@ fn main() {
         bytes: false,
         git_detail: false,
         sep: b" | ",
+        path: None,
         state_dir: Some(temp.as_os_str()),
     };
     bench("render (all widgets)", 5_000, || {

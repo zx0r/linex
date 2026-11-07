@@ -29,8 +29,20 @@ fn parse_u16(b: &[u8]) -> u16 {
 }
 
 #[rustfmt::skip]
-fn probe_root(cwd: &mut [u8; 1024]) -> Option<(usize, usize)> {
-    let cwd_len = sys::getcwd_stack(cwd)?;
+fn probe_root(cwd: &mut [u8; 1024], target_path: Option<&Path>) -> Option<(usize, usize)> {
+    let mut cwd_len = match target_path {
+        Some(p) => {
+            let b = p.as_os_str().as_encoded_bytes();
+            if b.is_empty() || b.len() >= 1000 {
+                sys::getcwd_stack(cwd)?
+            } else {
+                cwd[..b.len()].copy_from_slice(b);
+                b.len()
+            }
+        }
+        None => sys::getcwd_stack(cwd)?,
+    };
+    while cwd_len > 1 && cwd[cwd_len - 1] == b'/' { cwd_len -= 1; }
     let mut k = cwd_len;
     for _ in 0..32 {
         if k + 6 >= cwd.len() || k == 0 { break; }
@@ -97,9 +109,14 @@ fn render_counters(out: &mut Out, d: fmt::Dialect, m: &Metrics, stashed: u16) {
 }
 
 #[rustfmt::skip]
-pub fn render(out: &mut Out, d: fmt::Dialect, icons: bool, _detail: bool) -> bool {
+pub fn render(out: &mut Out, d: fmt::Dialect, icons: bool, detail: bool) -> bool {
+    render_at(out, d, icons, detail, None)
+}
+
+#[rustfmt::skip]
+pub fn render_at(out: &mut Out, d: fmt::Dialect, icons: bool, _detail: bool, path: Option<&Path>) -> bool {
     let mut cwd = [0u8; 1024];
-    let Some((r_len, _)) = probe_root(&mut cwd) else { return true; };
+    let Some((r_len, _)) = probe_root(&mut cwd, path) else { return true; };
     cwd[r_len..r_len + 6].copy_from_slice(b"/.git\0");
     // SAFETY: g_path is explicitly null-terminated at r_len + 5.
     let g_path = unsafe { CStr::from_bytes_with_nul_unchecked(&cwd[..r_len + 6]) };
@@ -146,6 +163,7 @@ pub fn render(out: &mut Out, d: fmt::Dialect, icons: bool, _detail: bool) -> boo
     }
 
     fmt::style(out, d, fmt::Color::Blue);
+    fmt::bold(out, d);
     if icons { out.push(ICON_GIT); out.byte(b' '); } else { out.push(b"GIT "); }
     if let Some(name) = line.strip_prefix(b"ref: refs/heads/") { fmt::text(out, d, name); } else { fmt::style(out, d, fmt::Color::Red); out.push(b"detached"); }
     fmt::style(out, d, fmt::Color::Reset);
@@ -158,5 +176,6 @@ pub fn render(out: &mut Out, d: fmt::Dialect, icons: bool, _detail: bool) -> boo
     if m.behind > 0 { out.byte(b' '); fmt::style(out, d, fmt::Color::Yellow); out.push("⇣".as_bytes()); fmt::u64(out, u64::from(m.behind)); fmt::style(out, d, fmt::Color::Reset); }
     render_counters(out, d, &m, stashed);
     if !is_dirty && m.staged == 0 && m.unstaged == 0 && m.untracked == 0 && m.conflicted == 0 { fmt::style(out, d, fmt::Color::Green); out.push(" ✓".as_bytes()); fmt::style(out, d, fmt::Color::Reset); }
+    out.byte(b' ');
     true
 }

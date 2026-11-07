@@ -11,6 +11,7 @@ fn test_cli_all_widgets_default_icons() {
     assert!(stdout.contains('\u{f035b}'));
     assert!(stdout.contains('\u{efc5}'));
     assert!(stdout.contains('\u{f02ca}'));
+    assert!(stdout.contains('\u{f176}'));
 }
 
 #[test]
@@ -25,6 +26,7 @@ fn test_cli_all_widgets_no_icons() {
     assert!(stdout.contains("CPU"));
     assert!(stdout.contains("MEM"));
     assert!(stdout.contains("SSD"));
+    assert!(stdout.contains("UP"));
 }
 
 #[test]
@@ -37,6 +39,18 @@ fn test_cli_individual_widgets() {
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains('\u{f035b}'));
+}
+
+#[test]
+fn test_cli_uptime_widget() {
+    let output = Command::new(env!("CARGO_BIN_EXE_linex"))
+        .arg("uptime")
+        .output()
+        .expect("failed to execute process");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains('\u{f176}'));
 }
 
 #[test]
@@ -64,6 +78,19 @@ fn test_cli_git_status_detailed() {
 }
 
 #[test]
+fn test_cli_git_with_path_arg() {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let output = Command::new(env!("CARGO_BIN_EXE_linex"))
+        .args(["git", manifest_dir])
+        .output()
+        .expect("failed to execute process");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains('\u{f418}'));
+}
+
+#[test]
 fn test_cli_no_color_has_no_escape_codes() {
     let output = Command::new(env!("CARGO_BIN_EXE_linex"))
         .arg("--no-color")
@@ -76,6 +103,7 @@ fn test_cli_no_color_has_no_escape_codes() {
     assert!(stdout.contains("CPU"));
     assert!(stdout.contains("MEM"));
     assert!(stdout.contains("SSD"));
+    assert!(stdout.contains("UP"));
 }
 
 #[test]
@@ -183,6 +211,7 @@ fn test_lib_render_in_process() {
         bytes: false,
         git_detail: false,
         sep: b" | ",
+        path: None,
         state_dir: Some(temp.as_os_str()),
     };
     let ok = linex::render(&cfg, &mut out);

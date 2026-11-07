@@ -16,7 +16,7 @@ pub enum Cmd<'a> {
     Version,
 }
 
-pub const HELP: &[u8] = b"linex [WIDGET...] [OPTIONS]\n\nWIDGETS: cpu mem ssd git\nOPTIONS:\n  -s, --style <ansi|tmux|plain>\n  -G, --git-status\n  -b, --bytes\n      --no-icons\n      --no-color\n      --separator <S>\n  -h, --help\n  -V, --version\n";
+pub const HELP: &[u8] = b"linex [WIDGET...] [OPTIONS]\n\nWIDGETS: cpu mem ssd git uptime\nOPTIONS:\n  -s, --style <ansi|tmux|plain>\n  -G, --git-status\n  -b, --bytes\n      --no-icons\n      --no-color\n      --separator <S>\n  -h, --help\n  -V, --version\n";
 pub const VERSION: &[u8] = concat!("linex ", env!("CARGO_PKG_VERSION"), "\n").as_bytes();
 
 /// Parse CLI arguments.
@@ -27,7 +27,7 @@ pub const VERSION: &[u8] = concat!("linex ", env!("CARGO_PKG_VERSION"), "\n").as
 #[rustfmt::skip]
 pub fn parse<'a>(argv: &'a [std::ffi::OsString], env: &'a Env) -> Result<Cmd<'a>, &'static [u8]> {
     let mut widgets = Widgets::empty();
-    let (mut dialect, mut icons, mut bytes, mut git_detail, mut no_color, mut sep) = (None, true, false, false, false, None);
+    let (mut dialect, mut icons, mut bytes, mut git_detail, mut no_color, mut sep, mut path) = (None, true, false, false, false, None, None);
     let mut i = 0;
     while i < argv.len() {
         let arg = argv.get(i).map(|s| s.as_encoded_bytes()).unwrap_or_default();
@@ -50,12 +50,31 @@ pub fn parse<'a>(argv: &'a [std::ffi::OsString], env: &'a Env) -> Result<Cmd<'a>
                 i += 1;
                 sep = Some(val);
             }
+            b"-C" => {
+                let val = argv.get(i).ok_or(&b"missing -C value"[..])?;
+                i += 1;
+                path = Some(std::path::Path::new(val));
+            }
             _ if arg.starts_with(b"--style=") => dialect = Some(parse_dialect(&arg[8..])?),
             _ if arg.starts_with(b"--separator=") => sep = Some(&arg[12..]),
+            _ if arg.starts_with(b"-C") && arg.len() > 2 => {
+                if let Some(os_arg) = argv.get(i - 1) {
+                    let bytes = os_arg.as_encoded_bytes();
+                    // SAFETY: slicing valid encoded bytes from index 2 onwards
+                    let sub = unsafe { std::ffi::OsStr::from_encoded_bytes_unchecked(&bytes[2..]) };
+                    path = Some(std::path::Path::new(sub));
+                }
+            }
             b"cpu" => widgets.push(Widget::Cpu),
             b"mem" => widgets.push(Widget::Mem),
             b"ssd" => widgets.push(Widget::Ssd),
             b"git" => widgets.push(Widget::Git),
+            b"uptime" => widgets.push(Widget::Uptime),
+            _ if !arg.starts_with(b"-") => {
+                if path.is_none() && !arg.is_empty() {
+                    path = argv.get(i - 1).map(std::path::Path::new);
+                }
+            }
             _ => return Err(&b"unknown argument"[..]),
         }
     }
@@ -65,6 +84,7 @@ pub fn parse<'a>(argv: &'a [std::ffi::OsString], env: &'a Env) -> Result<Cmd<'a>
     Ok(Cmd::Run(crate::Config {
         widgets, dialect: d, icons, bytes, git_detail,
         sep: sep.unwrap_or(b" "),
+        path,
         state_dir: env.state_dir.as_deref(),
     }))
 }
