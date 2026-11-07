@@ -54,13 +54,35 @@ pub fn read() -> Option<MemInfo> {
     Some(MemInfo { total, available: total.saturating_sub(used) })
 }
 
+pub const ICON_MEM: &[u8] = "\u{efc5}".as_bytes();
+
+const C_GREEN: u8 = 84;
+const C_YELLOW: u8 = 227;
+const C_RED: u8 = 203;
+
+#[inline]
+pub const fn color_for_mem(bp: u16) -> u8 {
+    match bp {
+        0..=7000 => C_GREEN,
+        7001..=8500 => C_YELLOW,
+        _ => C_RED,
+    }
+}
+
 #[rustfmt::skip]
 pub fn render(out: &mut crate::fmt::Out, d: crate::fmt::Dialect, icons: bool, bytes: bool) -> bool {
     if let Some(m) = read() {
-        crate::fmt::mem(out, d, icons, bytes, m.total.saturating_sub(m.available), m.total);
+        let used = m.total.saturating_sub(m.available);
+        let total = m.total;
+        let bp = if total > 0 { u16::try_from((u128::from(used) * 10_000) / u128::from(total)).unwrap_or(10_000) } else { 0 };
+        crate::fmt::color(out, d, color_for_mem(bp));
+        if icons { out.push(ICON_MEM); out.byte(b' '); } else { out.push(b"MEM "); }
+        if bytes { crate::fmt::human_bytes(out, used); out.byte(b'/'); crate::fmt::human_bytes(out, total); } else { crate::fmt::percent(out, bp); }
+        crate::fmt::reset(out, d);
         true
     } else {
-        crate::fmt::mem_err(out, icons);
+        if icons { out.push(ICON_MEM); out.byte(b' '); } else { out.push(b"MEM "); }
+        out.push(b"?");
         false
     }
 }

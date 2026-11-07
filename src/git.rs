@@ -16,6 +16,8 @@ struct Metrics {
     unstaged: u16,
     untracked: u16,
     conflicted: u16,
+    renamed: u16,
+    deleted: u16,
 }
 
 #[rustfmt::skip]
@@ -85,32 +87,54 @@ fn parse_cache(buf: &[u8]) -> (Metrics, u16) {
                 m.ahead = parse_u16(&ab[..p]);
                 if let Some(b) = ab[p..].strip_prefix(b" -") { m.behind = parse_u16(b); }
             }
-        } else if let Some(st) = line.strip_prefix(b"# branch.stash ") { stashed = parse_u16(st); }
-        else if line.starts_with(b"? ") { m.untracked = m.untracked.saturating_add(1); }
-        else if line.starts_with(b"u ") { m.conflicted = m.conflicted.saturating_add(1); }
-        else if (line.starts_with(b"1 ") || line.starts_with(b"2 ")) && line.len() > 3 {
-            if line[2] != b'.' { m.staged = m.staged.saturating_add(1); }
-            if line[3] != b'.' { m.unstaged = m.unstaged.saturating_add(1); }
+        } else if let Some(st) = line.strip_prefix(b"# branch.stash ") {
+            stashed = parse_u16(st);
+        } else if line.starts_with(b"? ") {
+            m.untracked = m.untracked.saturating_add(1);
+        } else if line.starts_with(b"u ") {
+            m.conflicted = m.conflicted.saturating_add(1);
+        } else if line.starts_with(b"2 ") && line.len() > 3 {
+            m.renamed = m.renamed.saturating_add(1);
+        } else if line.starts_with(b"1 ") && line.len() > 3 {
+            let x = line[2];
+            let y = line[3];
+            if x == b'D' || y == b'D' {
+                m.deleted = m.deleted.saturating_add(1);
+            } else {
+                if x != b'.' { m.staged = m.staged.saturating_add(1); }
+                if y != b'.' { m.unstaged = m.unstaged.saturating_add(1); }
+            }
         }
     }
     (m, stashed)
 }
 
-const C_GREEN: u8 = 84;
-const C_PEACH: u8 = 215;
-const C_SKY: u8 = 87;
-const C_RED: u8 = 203;
-const C_SAPPHIRE: u8 = 75;
-const C_MAUVE: u8 = 135;
+// Visual palette with distinct, non-colliding 256-color codes:
+const C_BRANCH: u8 = 147; // Branch name (Lavender #b4befe)
+const C_YELLOW: u8 = 227; // Dirty worktree star '*' (Yellow #f9e2af)
+const C_OP: u8 = 209; // In-progress git operation (Salmon/Coral #fab387)
+const C_SHA: u8 = 245; // Commit SHA (Muted Gray #6c7086)
+const C_AHEAD: u8 = 75; // Ahead commits '⇡' (Sapphire #74c7ec)
+const C_BEHIND: u8 = 141; // Behind commits '⇣' (Mauve #cba6f7)
+const C_DIVERGED: u8 = 135; // Diverged commits '⇕' (Magenta #f5c2e7)
+const C_RED: u8 = 203; // Conflicted files '✖' (Red #f38ba8)
+const C_PINK: u8 = 205; // Stashed entries '⚑' (Pink/Flamingo #f2cdcd)
+const C_MAROON: u8 = 161; // Deleted files '✘' (Maroon #eba0ac)
+const C_BLUE: u8 = 68; // Renamed files '»' (Cornflower Blue #89b4fa)
+const C_PEACH: u8 = 215; // Unstaged modified files '!' (Peach #fab387)
+const C_GREEN: u8 = 84; // Staged files '✚' / Clean status '✓' (Green #a6e3a1)
+const C_SKY: u8 = 87; // Untracked files '?' (Sky #89dceb)
 
 #[rustfmt::skip]
 fn render_counters(out: &mut Out, d: fmt::Dialect, m: &Metrics, stashed: u16) {
-    let list: [(u16, &[u8], u8); 5] = [
-        (m.staged, "\u{271a}".as_bytes(), C_GREEN),
-        (m.unstaged, b"!", C_PEACH),
-        (m.untracked, b"?", C_SKY),
-        (m.conflicted, "\u{2716}".as_bytes(), C_RED),
-        (stashed, "\u{2691}".as_bytes(), C_SKY),
+    let list: [(u16, &[u8], u8); 7] = [
+        (m.conflicted, "\u{2716}".as_bytes(), C_RED),    // ✖ Conflicted
+        (stashed,      "\u{2691}".as_bytes(), C_PINK),   // ⚑ Stashed
+        (m.deleted,    "\u{2718}".as_bytes(), C_MAROON), // ✘ Deleted
+        (m.renamed,    "\u{bb}".as_bytes(),   C_BLUE),   // » Renamed
+        (m.unstaged,   b"!",                  C_PEACH),  // ! Unstaged modified
+        (m.staged,     "\u{271a}".as_bytes(), C_GREEN),  // ✚ Staged
+        (m.untracked,  b"?",                  C_SKY),    // ? Untracked
     ];
     for (v, sym, col) in list {
         if v > 0 {
@@ -152,7 +176,6 @@ pub fn render_at(out: &mut Out, d: fmt::Dialect, icons: bool, _detail: bool, pat
 
     let idx_m = sys::mtime_at(&git_fd, c"index").unwrap_or(0);
     let head_m = sys::mtime_at(&git_fd, c"HEAD").unwrap_or(0);
-    let is_dirty = idx_m > head_m;
 
     let mut sha = [0u8; 7];
     let has_sha = resolve_sha(&git_fd, line, &mut sha);
@@ -177,24 +200,76 @@ pub fn render_at(out: &mut Out, d: fmt::Dialect, icons: bool, _detail: bool, pat
         for &c in b { if c == b'\n' { stashed = stashed.saturating_add(1); } }
     }
 
-    fmt::color(out, d, C_SAPPHIRE);
+    // Branch name:
+    fmt::color(out, d, C_BRANCH);
     fmt::bold(out, d);
     if icons { out.push(ICON_GIT); out.byte(b' '); } else { out.push(b"GIT "); }
-    if let Some(name) = line.strip_prefix(b"ref: refs/heads/") { fmt::text(out, d, name); } else { fmt::color(out, d, C_RED); out.push(b"detached"); }
+    if let Some(name) = line.strip_prefix(b"ref: refs/heads/") {
+        fmt::text(out, d, name);
+    } else {
+        fmt::color(out, d, C_RED);
+        out.push(b"detached");
+    }
     fmt::reset(out, d);
 
-    if is_dirty || m.unstaged > 0 { fmt::color(out, d, C_PEACH); out.byte(b'*'); fmt::reset(out, d); }
-    if !op.is_empty() { out.byte(b' '); fmt::color(out, d, C_PEACH); out.push(op); fmt::reset(out, d); }
-
-    if has_sha { out.byte(b' '); fmt::color(out, d, C_MAUVE); out.byte(b'('); out.push(&sha); out.byte(b')'); fmt::reset(out, d); }
-    if m.ahead > 0 && m.behind > 0 {
-        out.byte(b' '); fmt::color(out, d, C_MAUVE); out.push("⇕".as_bytes()); fmt::u64(out, u64::from(m.ahead + m.behind)); fmt::reset(out, d);
-    } else {
-        if m.ahead > 0 { out.byte(b' '); fmt::color(out, d, C_SAPPHIRE); out.push("⇡".as_bytes()); fmt::u64(out, u64::from(m.ahead)); fmt::reset(out, d); }
-        if m.behind > 0 { out.byte(b' '); fmt::color(out, d, C_SAPPHIRE); out.push("⇣".as_bytes()); fmt::u64(out, u64::from(m.behind)); fmt::reset(out, d); }
+    // Dirty worktree star indicator:
+    if m.unstaged > 0 || m.deleted > 0 {
+        fmt::color(out, d, C_YELLOW);
+        out.byte(b'*');
+        fmt::reset(out, d);
     }
+
+    // In-progress git operation:
+    if !op.is_empty() {
+        out.byte(b' ');
+        fmt::color(out, d, C_OP);
+        out.push(op);
+        fmt::reset(out, d);
+    }
+
+    // Commit SHA:
+    if has_sha {
+        out.byte(b' ');
+        fmt::color(out, d, C_SHA);
+        out.byte(b'(');
+        out.push(&sha);
+        out.byte(b')');
+        fmt::reset(out, d);
+    }
+
+    // Ahead / Behind / Diverged:
+    if m.ahead > 0 && m.behind > 0 {
+        out.byte(b' ');
+        fmt::color(out, d, C_DIVERGED);
+        out.push("⇕".as_bytes());
+        fmt::u64(out, u64::from(m.ahead + m.behind));
+        fmt::reset(out, d);
+    } else {
+        if m.ahead > 0 {
+            out.byte(b' ');
+            fmt::color(out, d, C_AHEAD);
+            out.push("⇡".as_bytes());
+            fmt::u64(out, u64::from(m.ahead));
+            fmt::reset(out, d);
+        }
+        if m.behind > 0 {
+            out.byte(b' ');
+            fmt::color(out, d, C_BEHIND);
+            out.push("⇣".as_bytes());
+            fmt::u64(out, u64::from(m.behind));
+            fmt::reset(out, d);
+        }
+    }
+
+    // Status counters:
     render_counters(out, d, &m, stashed);
-    if !is_dirty && m.staged == 0 && m.unstaged == 0 && m.untracked == 0 && m.conflicted == 0 { fmt::color(out, d, C_GREEN); out.push(" ✓".as_bytes()); fmt::reset(out, d); }
+
+    // Clean worktree indicator:
+    if m.staged == 0 && m.unstaged == 0 && m.untracked == 0 && m.conflicted == 0 && m.deleted == 0 && m.renamed == 0 {
+        fmt::color(out, d, C_GREEN);
+        out.push(" ✓".as_bytes());
+        fmt::reset(out, d);
+    }
     out.byte(b' ');
     true
 }

@@ -43,16 +43,10 @@ pub static STYLE_MATRIX: [[&[u8]; 8]; 3] = [
     [b"#[default]", b"#[fg=colour84]", b"#[fg=colour227]", b"#[fg=colour203]", b"#[fg=colour87]", b"#[fg=colour75]", b"#[fg=colour135]", b"#[fg=colour205]"],
 ];
 
-pub const ICON_CPU: &[u8] = "\u{f035b}".as_bytes();
-pub const ICON_MEM: &[u8] = "\u{efc5}".as_bytes();
-pub const ICON_SSD: &[u8] = "\u{f02ca}".as_bytes();
-pub const ICON_UPTIME: &[u8] = "\u{f176}".as_bytes();
-
 pub fn style(out: &mut Out, d: Dialect, c: Color) {
     out.push(STYLE_MATRIX[d as usize][c as usize]);
 }
 
-#[inline(always)]
 pub fn color(out: &mut Out, d: Dialect, idx: u8) {
     match d {
         Dialect::Plain => {}
@@ -69,7 +63,6 @@ pub fn color(out: &mut Out, d: Dialect, idx: u8) {
     }
 }
 
-#[inline(always)]
 pub fn reset(out: &mut Out, d: Dialect) {
     match d {
         Dialect::Plain => {}
@@ -85,13 +78,6 @@ pub fn bold(out: &mut Out, d: Dialect) {
         Dialect::Tmux => out.push(b"#[bold]"),
     }
 }
-
-#[rustfmt::skip]
-pub const fn color_for_cpu(bp: u16) -> Color { match bp { 0..=5000 => Color::Green, 5001..=8000 => Color::Yellow, _ => Color::Red } }
-#[rustfmt::skip]
-pub const fn color_for_mem(bp: u16) -> Color { match bp { 0..=7000 => Color::Green, 7001..=8500 => Color::Yellow, _ => Color::Red } }
-#[rustfmt::skip]
-pub const fn color_for_ssd(bp: u16) -> Color { match bp { 0..=7500 => Color::Green, 7501..=9000 => Color::Yellow, _ => Color::Red } }
 
 #[rustfmt::skip]
 pub fn u64(out: &mut Out, mut v: u64) {
@@ -125,13 +111,28 @@ pub fn text(out: &mut Out, d: Dialect, s: &[u8]) {
     }
 }
 
+// ==============================================================================
+// Backwards Compatibility Shims (Forwarding to Widget Domains)
+// ==============================================================================
+
+pub use crate::cpu::ICON_CPU;
+pub use crate::mem::ICON_MEM;
+pub use crate::ssd::ICON_SSD;
+
+#[rustfmt::skip]
+pub const fn color_for_cpu(bp: u16) -> Color { match bp { 0..=5000 => Color::Green, 5001..=8000 => Color::Yellow, _ => Color::Red } }
+#[rustfmt::skip]
+pub const fn color_for_mem(bp: u16) -> Color { match bp { 0..=7000 => Color::Green, 7001..=8500 => Color::Yellow, _ => Color::Red } }
+#[rustfmt::skip]
+pub const fn color_for_ssd(bp: u16) -> Color { match bp { 0..=7500 => Color::Green, 7501..=9000 => Color::Yellow, _ => Color::Red } }
+
 #[rustfmt::skip]
 pub fn cpu(out: &mut Out, d: Dialect, icons: bool, pct: Option<u16>, ok: bool) {
     if let Some(bp) = pct {
-        style(out, d, color_for_cpu(bp));
+        color(out, d, crate::cpu::color_for_cpu(bp));
         if icons { out.push(ICON_CPU); out.byte(b' '); } else { out.push(b"CPU "); }
         percent(out, bp);
-        style(out, d, Color::Reset);
+        reset(out, d);
     } else {
         if icons { out.push(ICON_CPU); out.byte(b' '); } else { out.push(b"CPU "); }
         out.push(if ok { b"--" } else { b"?" });
@@ -141,10 +142,10 @@ pub fn cpu(out: &mut Out, d: Dialect, icons: bool, pct: Option<u16>, ok: bool) {
 #[rustfmt::skip]
 pub fn mem(out: &mut Out, d: Dialect, icons: bool, bytes: bool, used: u64, total: u64) {
     let bp = if total > 0 { u16::try_from((u128::from(used) * 10_000) / u128::from(total)).unwrap_or(10_000) } else { 0 };
-    style(out, d, color_for_mem(bp));
+    color(out, d, crate::mem::color_for_mem(bp));
     if icons { out.push(ICON_MEM); out.byte(b' '); } else { out.push(b"MEM "); }
     if bytes { human_bytes(out, used); out.byte(b'/'); human_bytes(out, total); } else { percent(out, bp); }
-    style(out, d, Color::Reset);
+    reset(out, d);
 }
 
 #[rustfmt::skip]
@@ -156,47 +157,15 @@ pub fn mem_err(out: &mut Out, icons: bool) {
 #[rustfmt::skip]
 pub fn ssd(out: &mut Out, d: Dialect, icons: bool, bytes: bool, used: u64, total: u64) {
     let bp = if total > 0 { u16::try_from((u128::from(used) * 10_000) / u128::from(total)).unwrap_or(10_000) } else { 0 };
-    style(out, d, color_for_ssd(bp));
+    color(out, d, crate::ssd::color_for_ssd(bp));
     if icons { out.push(ICON_SSD); out.byte(b' '); } else { out.push(b"SSD "); }
     if bytes { human_bytes(out, used); out.byte(b'/'); human_bytes(out, total); } else { percent(out, bp); }
-    style(out, d, Color::Reset);
+    reset(out, d);
 }
 
 #[rustfmt::skip]
 pub fn ssd_err(out: &mut Out, icons: bool) {
     if icons { out.push(ICON_SSD); out.byte(b' '); } else { out.push(b"SSD "); }
-    out.push(b"?");
-}
-
-#[rustfmt::skip]
-pub fn uptime(out: &mut Out, d: Dialect, icons: bool, secs: u64) {
-    style(out, d, Color::Reset);
-    if icons { out.push(ICON_UPTIME); } else { out.push(b"UP "); }
-    if secs >= 365 * 86400 {
-        u64(out, secs / (365 * 86400));
-        out.byte(b'y');
-    } else if secs >= 30 * 86400 {
-        u64(out, secs / (30 * 86400));
-        out.byte(b'm');
-    } else if secs >= 7 * 86400 {
-        u64(out, secs / (7 * 86400));
-        out.byte(b'w');
-    } else if secs >= 86400 {
-        u64(out, secs / 86400);
-        out.byte(b'd');
-    } else if secs >= 3600 {
-        u64(out, secs / 3600);
-        out.byte(b'h');
-    } else {
-        u64(out, (secs / 60).max(1));
-        out.byte(b'm');
-    }
-    style(out, d, Color::Reset);
-}
-
-#[rustfmt::skip]
-pub fn uptime_err(out: &mut Out, icons: bool) {
-    if icons { out.push(ICON_UPTIME); } else { out.push(b"UP "); }
     out.push(b"?");
 }
 

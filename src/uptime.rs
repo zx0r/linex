@@ -69,6 +69,48 @@ pub fn uptime_secs() -> Option<u64> {
     Some(sec)
 }
 
+pub const ICON_UPTIME: &[u8] = "\u{f176}".as_bytes();
+
+pub fn render(out: &mut crate::fmt::Out, d: crate::fmt::Dialect, icons: bool) -> bool {
+    if let Some(secs) = uptime_secs() {
+        crate::fmt::reset(out, d);
+        if icons {
+            out.push(ICON_UPTIME);
+        } else {
+            out.push(b"UP ");
+        }
+        if secs >= 365 * 86400 {
+            crate::fmt::u64(out, secs / (365 * 86400));
+            out.byte(b'y');
+        } else if secs >= 30 * 86400 {
+            crate::fmt::u64(out, secs / (30 * 86400));
+            out.byte(b'm');
+        } else if secs >= 7 * 86400 {
+            crate::fmt::u64(out, secs / (7 * 86400));
+            out.byte(b'w');
+        } else if secs >= 86400 {
+            crate::fmt::u64(out, secs / 86400);
+            out.byte(b'd');
+        } else if secs >= 3600 {
+            crate::fmt::u64(out, secs / 3600);
+            out.byte(b'h');
+        } else {
+            crate::fmt::u64(out, (secs / 60).max(1));
+            out.byte(b'm');
+        }
+        crate::fmt::reset(out, d);
+        true
+    } else {
+        if icons {
+            out.push(ICON_UPTIME);
+        } else {
+            out.push(b"UP ");
+        }
+        out.push(b"?");
+        false
+    }
+}
+
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn uptime_secs() -> Option<u64> {
     None

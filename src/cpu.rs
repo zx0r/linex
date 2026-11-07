@@ -86,6 +86,73 @@ pub fn read() -> Option<Ticks> {
     Some(Ticks { busy: u64::from(user.wrapping_add(sys).wrapping_add(nice)), idle: u64::from(idle) })
 }
 
+pub const ICON_CPU: &[u8] = "\u{f035b}".as_bytes();
+
+const C_GREEN: u8 = 84;
+const C_YELLOW: u8 = 227;
+const C_RED: u8 = 203;
+
+#[inline]
+pub const fn color_for_cpu(bp: u16) -> u8 {
+    match bp {
+        0..=5000 => C_GREEN,
+        5001..=8000 => C_YELLOW,
+        _ => C_RED,
+    }
+}
+
+pub fn render(
+    out: &mut crate::fmt::Out,
+    d: crate::fmt::Dialect,
+    icons: bool,
+    state_dir: Option<&std::ffi::OsStr>,
+) -> bool {
+    let Some(curr) = read() else {
+        if icons {
+            out.push(ICON_CPU);
+            out.byte(b' ');
+        } else {
+            out.push(b"CPU ");
+        }
+        out.push(b"?");
+        return false;
+    };
+    let Some(file) = state_dir.and_then(crate::state::open) else {
+        if icons {
+            out.push(ICON_CPU);
+            out.byte(b' ');
+        } else {
+            out.push(b"CPU ");
+        }
+        out.push(b"?");
+        return false;
+    };
+    let (shown, next) = step(file.load(), curr);
+    if let Some(n) = next {
+        file.store(&n);
+    }
+    if let Some(bp) = shown {
+        crate::fmt::color(out, d, color_for_cpu(bp));
+        if icons {
+            out.push(ICON_CPU);
+            out.byte(b' ');
+        } else {
+            out.push(b"CPU ");
+        }
+        crate::fmt::percent(out, bp);
+        crate::fmt::reset(out, d);
+    } else {
+        if icons {
+            out.push(ICON_CPU);
+            out.byte(b' ');
+        } else {
+            out.push(b"CPU ");
+        }
+        out.push(b"--");
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
